@@ -43,10 +43,17 @@ def get_title(the_poem):
     possible_titles = [
       lambda: "Untitled Poem # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
       lambda: "Untitled Poem # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
+      lambda: "Untitled Poem # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
+      lambda: "Untitled Composition # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
+      lambda: "Untitled Composition # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
+      lambda: "Untitled # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
       lambda: "'%s'" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),  # First line, in quotes 
       lambda: "'%s'" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),  # First line, in quotes 
       lambda: "'%s'" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),  # First line, in quotes 
       lambda: "'%s'" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),  # First line, in quotes 
+      lambda: "'%s'" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip().strip(),
+      lambda: "'%s'" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip().strip(),
+      lambda: "'%s'" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip().strip(),
       lambda: genny.gen_text(sentences_desired=1).replace('\n', ' ').strip()[:-1], # New 'sentence' from corpus 
     ]
     title = random.choice(possible_titles)()
@@ -57,8 +64,8 @@ def get_title(the_poem):
 
 
 # Set up the basic parameters for the run
-sample_texts = random.sample(glob.glob(poetry_corpus + '/*txt'), random.randint(15,30))
-chain_length = random.choice([3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7])
+sample_texts = random.sample(glob.glob(poetry_corpus + '/*txt'), random.randint(20,50))
+chain_length = random.choice([3, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 7, 7, 7])
 
 # And add their names to the list of tags, plus track sources of this particular poem
 source_texts = [ os.path.splitext(th.remove_prefix(os.path.basename(t), "Link to ").strip())[0] for t in sample_texts ]
