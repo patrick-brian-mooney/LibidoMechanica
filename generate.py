@@ -56,14 +56,13 @@ def get_title(the_poem):
 
 
 # Set up the basic parameters for the run
-sample_texts = random.sample(glob.glob(poetry_corpus + '/*txt'), random.randint(5,12))
-chain_length = random.randint(3,7)
+sample_texts = random.sample(glob.glob(poetry_corpus + '/*txt'), random.randint(15,30))
+chain_length = random.choice([3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7])
 
 # And add their names to the list of tags
-the_tags =   [ os.path.splitext(th.remove_prefix(os.path.basename(t), "Link to ").strip())[0] for t in sample_texts ]
-the_tags =   [ t.replace(',', ':').replace('"', '').replace("'", '') for t in the_tags ]
-the_tags +=  ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains'] + \
-             ['Markov chain length: %d' % chain_length, '%d texts' % len(sample_texts) ]
+source_texts = [ os.path.splitext(th.remove_prefix(os.path.basename(t), "Link to ").strip())[0] for t in sample_texts ]
+the_tags =  ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains'] + \
+            ['Markov chain length: %d' % chain_length, '%d texts' % len(sample_texts) ]
 
 poem_length = random.randint(4,20)              # in SENTENCES. Not lines.
 
@@ -97,7 +96,8 @@ patrick_logger.log_it('INFO: the_status is: ' + pprint.pformat(the_status), 2)
 
 # Archive the generated post
 post_data = {'title': the_title, 'text': the_poem, 'time': datetime.datetime.now().isoformat() }
-post_data['status_code'], post_data['tumblr_data'], post_data['tags'] = the_status, the_tumblr_data, the_tags
+post_data['tags'], post_data['sources'] = the_tags, source_texts
+post_data['status_code'], post_data['tumblr_data'] = the_status, the_tumblr_data
 archive_name = "%s — %s.json.bz2" % (post_data['time'], the_title)
 with bz2.BZ2File(os.path.join(post_archives, archive_name), mode='wb') as archive_file:
     archive_file.write(json.dumps(post_data, sort_keys=True, indent=3, ensure_ascii=False).encode())
