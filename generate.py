@@ -108,7 +108,7 @@ patrick_logger.log_it('INFO: the_status is: ' + pprint.pformat(the_status), 2)
 
 # Archive the generated post
 post_data = {'title': the_title, 'text': the_poem, 'time': datetime.datetime.now().isoformat() }
-post_data['formatted_text'], post_data['tags'], post_data['sources'] = formatted_poem, the_tags, source_texts
+post_data['formatted_text'], post_data['tags'], post_data['sources'] = formatted_poem, the_tags, sorted(source_texts)
 post_data['status_code'], post_data['tumblr_data'] = the_status, the_tumblr_data
 archive_name = "%s — %s.json.bz2" % (post_data['time'], the_title)
 with bz2.BZ2File(os.path.join(post_archives, archive_name), mode='wb') as archive_file:
