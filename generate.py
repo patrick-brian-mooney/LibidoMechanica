@@ -47,6 +47,9 @@ def get_title(the_poem):
       lambda: "Untitled Composition # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
       lambda: "Untitled Composition # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
       lambda: "Untitled # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
+      lambda: "Untitled ('%s')" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),  
+      lambda: "Untitled ('%s')" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),  
+      lambda: "Untitled ('%s')" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),  
       lambda: "'%s'" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),  # First line, in quotes 
       lambda: "'%s'" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),  # First line, in quotes 
       lambda: "'%s'" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),  # First line, in quotes 
@@ -91,7 +94,8 @@ formatted_poem = '\n'.join(['<p>%s</p>' % line for line in formatted_poem.split(
 # Pretty-print (for debugging only; doesn't matter for Tumblr upload, but neither does it cause problems)
 formatted_poem = th.multi_replace(formatted_poem, [['<p>\n', '\n<p>']])
 # Prevent all spaces from collapsing; get rid of spurious paragraphs
-formatted_poem = th.multi_replace(formatted_poem, [[' ', '&nbsp;'], ['<p></p>', '']])
+formatted_poem = th.multi_replace(formatted_poem, [[' ', '&nbsp;'], ['<p></p>', '']])     # Well, that doesn't work. Thanks, Tumblr
+# formatted_poem = "<pre>\n%s\n</pre>" % formatted_poem
 
 patrick_logger.log_it("poem generated; title is; %s" % the_title)
 patrick_logger.log_it("lines are: \n\n" + the_poem)
@@ -99,12 +103,12 @@ patrick_logger.log_it("tags are: %s" % the_tags)
 
 # All right, we're ready. Let's go.
 patrick_logger.log_it('INFO: Attempting to post the content', 2)
-the_status, the_tumblr_data = social_media.tumblr_text_post(libidomechanica_client, ', '.join(the_tags), the_title, the_poem)
+the_status, the_tumblr_data = social_media.tumblr_text_post(libidomechanica_client, ', '.join(the_tags), the_title, formatted_poem)
 patrick_logger.log_it('INFO: the_status is: ' + pprint.pformat(the_status), 2)
 
 # Archive the generated post
 post_data = {'title': the_title, 'text': the_poem, 'time': datetime.datetime.now().isoformat() }
-post_data['tags'], post_data['sources'] = the_tags, source_texts
+post_data['formatted_text'], post_data['tags'], post_data['sources'] = formatted_poem, the_tags, source_texts
 post_data['status_code'], post_data['tumblr_data'] = the_status, the_tumblr_data
 archive_name = "%s — %s.json.bz2" % (post_data['time'], the_title)
 with bz2.BZ2File(os.path.join(post_archives, archive_name), mode='wb') as archive_file:
