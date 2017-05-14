@@ -71,7 +71,7 @@ def get_title(the_poem):
 
 # Set up the basic parameters for the run
 sample_texts = random.sample(glob.glob(poetry_corpus + '/*txt'), random.randint(20,50))
-chain_length = random.choice([3, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 7, 7, 7])
+chain_length = random.choice([3, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 7, 7, 7, 8, 9, 10])
 
 # And add their names to the list of tags, plus track sources of this particular poem
 source_texts = [ os.path.splitext(th.remove_prefix(os.path.basename(t), "Link to ").strip())[0] for t in sample_texts ]
