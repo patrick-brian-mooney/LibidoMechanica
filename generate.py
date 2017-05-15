@@ -58,14 +58,18 @@ def get_title(the_poem):
       lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip().strip(),
       lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip().strip(),
       lambda: genny.gen_text(sentences_desired=1).replace('\n', ' ').strip()[:-1], # New 'sentence' from corpus 
+      lambda: genny.gen_text(sentences_desired=1).replace('\n', ' ').strip()[:-1], # New 'sentence' from corpus 
+      lambda: genny.gen_text(sentences_desired=1).replace('\n', ' ').strip()[:-1], # New 'sentence' from corpus 
     ]
     title = random.choice(possible_titles)()
-    while len(title) > 120:
+    while len(title) > 90:
         words = title.split()
         title = ' '.join(words[:random.randint(3, min(12, len(words)))])
-    title = title.strip()
+    title = th.strip_leading_and_trailing_punctuation(title.strip()).strip()
     if title.startswith('‘') and not title.endswith('’'):       # The shortening procedure above might have stripped the closing quote
         title = title + '’'
+    if '(‘' in title and not '’)' in title:
+        title = title + '’)'
     return title
 
 
