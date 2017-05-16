@@ -101,8 +101,8 @@ formatted_poem = '\n'.join(['<p>%s</p>' % line for line in formatted_poem.split(
 # Pretty-print (for debugging only; doesn't matter for Tumblr upload, but neither does it cause problems)
 formatted_poem = th.multi_replace(formatted_poem, [['<p>\n', '\n<p>']])
 # Prevent all spaces from collapsing; get rid of spurious paragraphs
-formatted_poem = th.multi_replace(formatted_poem, [[' ', '&nbsp;'], ['<p></p>', '']])     # Well, that doesn't work. Thanks, Tumblr
-# formatted_poem = "<pre>\n%s\n</pre>" % formatted_poem
+formatted_poem = th.multi_replace(formatted_poem, [[' ', '&nbsp;'], ['<p></p>', '']])
+# formatted_poem = "<pre>\n%s\n</pre>" % formatted_poem         # OK, that looks really ugly.
 
 patrick_logger.log_it("poem generated; title is: %s" % the_title)
 patrick_logger.log_it("lines are: \n\n" + the_poem)
