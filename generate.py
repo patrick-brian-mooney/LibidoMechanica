@@ -104,7 +104,7 @@ formatted_poem = th.multi_replace(formatted_poem, [['<p>\n', '\n<p>']])
 formatted_poem = th.multi_replace(formatted_poem, [[' ', '&nbsp;'], ['<p></p>', '']])     # Well, that doesn't work. Thanks, Tumblr
 # formatted_poem = "<pre>\n%s\n</pre>" % formatted_poem
 
-patrick_logger.log_it("poem generated; title is; %s" % the_title)
+patrick_logger.log_it("poem generated; title is: %s" % the_title)
 patrick_logger.log_it("lines are: \n\n" + the_poem)
 patrick_logger.log_it("tags are: %s" % the_tags)
 
