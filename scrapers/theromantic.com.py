@@ -40,7 +40,10 @@ for which_url in sorted(url_list):
         soup = BeautifulSoup(page.content, 'html.parser')
 
         html_title = soup.find('title').decode()
-        _, poem_author, poem_title = [t.strip() for t in remove_tags(html_title).split('-')]    # FORMAT: section name, author, title
+        try:
+            *_, poem_author, poem_title = [t.strip() for t in remove_tags(html_title).split('-')]
+        except ValueError:
+            poem_title, poem_author = [t.strip() for t in remove_tags(html_title).split('by')]
         poem_filename = '%s/%s: "%s"' % (os.path.dirname(files_to_download), poem_author.strip(), poem_title.strip())
 
         poem_stanzas = [][:]
@@ -81,4 +84,4 @@ print("\n\nAll URLs processed! Hooray!\n")
 if len(failed_poems):
     with open('%s/failed.url' % os.path.dirname(files_to_download), mode='w') as failed_file:
         failed_file.writelines(['%s\n' % l for l in failed_poems])
-    print('\n ...  but %d failed URLs written to %s/failed.url. Alas.\n\n') % (len(failed_poems), os.path.dirname(files_to_download))
+    print('\n ...  but %d failed URLs written to %s/failed.url. Alas.\n\n' % (len(failed_poems), os.path.dirname(files_to_download)))
