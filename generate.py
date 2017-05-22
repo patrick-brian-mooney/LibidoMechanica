@@ -69,6 +69,68 @@ def get_title(the_poem):
         title = title + '’)'
     return title
 
+
+def strip_invalid_chars(the_poem):
+    """Some characters appear in the training texts but are characters that, I am 
+    declaring by fiat, should not make it into the final generated poems at all.
+    The underscore is a good example of characters in this class. This function
+    takes an entire poem as input (THE_POEM) and returns a poem entirely
+    stripped of all such poems.
+    """
+    invalids = ['_', '*']
+    return ''.join([s for s in the_poem if not s in invalids])
+
+def curlify_quotes(the_poem, straight_quote, opening_quote, closing_quote):
+    """Goes through THE_POEM (a string) and looks for instances of STRAIGHT_QUOTE
+    (a single-character string). When it finds these instances, it substitutes
+    OPENING_QUOTE or CLOSING_QUOTE for them, trying to make good decisions about
+    which of those substitutions is appropriate.
+    
+    IMPORTANT CAVEAT: this routine iterates over THE_POEM, making in-place
+    changes at locations determined via an initial scan. This means that
+    OPENING_QUOTE and CLOSING_QUOTE **absolutely must** have the same len() as
+    STRAIGHT_QUOTE, or else weird things will happen. This should not be a
+    problem with standard English quotes under Python 3.X; but it may fail under
+    non-Roman scripts, in odd edge cases, or if the function is used to try to
+    do something other than curlify quotes.
+    
+    NOT FULLY TESTED, but I'm going to bed.
+    """    
+    assert len(straight_quote) == 1, "Quote characters passed to curify_quotes() must be one-character strings"
+    assert len(opening_quote) == 1, "Quote characters passed to curify_quotes() must be one-character strings"
+    assert len(closing_quote) == 1, "Quote characters passed to curify_quotes() must be one-character strings"
+    index = 0
+    while index < len(the_poem):
+        index = the_poem.find(straight_quote, index)
+        if index == -1:
+            break       # We're done.
+        if index == 0:                                                      # Is it the first character of the poem?
+            the_poem = opening_quote + the_poem[1:]
+        elif index == len(the_poem):                                        # Is it the last character of the poem?
+            the_poem = the_poem[:-1] + closing_quote
+        elif the_poem[index-1].isspace() and the_poem[index+1].isspace():   # Whitespace on both sides? Replace quote with space.
+            the_poem = the_poem[:index] + ' ' + the_poem[1+index:]                  
+        elif not the_poem[index-1].isspace():                               # Non-whitespace immediately before quote? It's a closing quote.
+            the_poem = the_poem[:index] + closing_quote + the_poem[index+1:]        
+        elif not the_poem[index+1].isspace():                               # Non-whitespace just after quote? It's an opening quote.
+            the_poem = the_poem[:index] + opening_quote + the_poem[index+1:]
+        else:                                                               # Quote appears in middle of non-whitespace text ...
+            if straight_quote == '"':
+                the_poem = the_poem[:index-1] + the_poem[index+1:]                  # Just strip it out.
+            elif straight_quote == "'":
+                the_poem = the_poem[:index-1] + closing_quote + the+poem[index+1:]  # Make it an apostrophe.
+            else:
+                raise NotImplementedError                                           # We don't know how to deal with this quote.
+    return the_poem
+    
+def balance_quotes(the_poem):
+    """Make sure that quotes in the poem are 'balanced.' Takes a poem, turns
+    straight quotes into smart quotes, and then checks to see whether those
+    quotes match. If not, it corrects them.
+    
+    NOT YET IMPLEMENTED."""
+    return the_poem
+
 def validate_punctuation(the_poem):
     """Cleans up the punctuation in the poems so that it appears to be more
     'correct.' Since characters are generated randomly based on a frequency
@@ -80,9 +142,18 @@ def validate_punctuation(the_poem):
     THE_POEM is a string, which is the text of the entire poem; the function 
     returns a new, cleaned-up version of the poem passed in.
     
-    NOT YET IMPLEMENTED.
+    NOT YET FULLY IMPLEMENTED.
     """
-    return the_poem
+    the_poem = strip_invalid_chars(the_poem)
+    the_poem = curlify_quotes(the_poem, "'", "‘", "’")
+    the_poem = curlify_quotes(the_poem, '"', '“', '”')    
+    return balance_quotes(the_poem)
+
+def do_basic_cleaning(the_poem):
+    """Does first-pass elementary cleanup tasks on THE_POEM. Returns the cleaned
+    version of THE_POEM.
+    """
+    return th.multi_replace(the_poem, [[' \n', '\n'],]).strip()
 
 
 # Set up the basic parameters for the run
@@ -99,6 +170,7 @@ poem_length = random.randint(4,20)              # in SENTENCES. Not lines.
 genny = pg.PoemGenerator(name='Libido Mechanica generator', training_texts=sample_texts, markov_length=chain_length)
 
 the_poem = genny.gen_text(sentences_desired=poem_length, paragraph_break_probability=0.2)
+the_poem = do_basic_cleaning(the_poem)
 the_poem = validate_punctuation(the_poem)
 
 the_title = get_title(the_poem)
