@@ -42,24 +42,20 @@ def get_title(the_poem):
     """Get a title for the poem."""
     possible_titles = [
       lambda: "Untitled Poem # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
-      lambda: "Untitled Poem # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
-      lambda: "Untitled Poem # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
-      lambda: "Untitled Composition # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
       lambda: "Untitled Composition # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
       lambda: "Untitled # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
       lambda: "Untitled ('%s')" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),
       lambda: "Untitled ('%s')" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),
-      lambda: "Untitled ('%s')" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),
       lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),  # First line, in quotes
       lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),  # First line, in quotes
       lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),  # First line, in quotes
       lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),  # First line, in quotes
-      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip().strip(),
-      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip().strip(),
-      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip().strip(),
-      lambda: th.strip_leading_and_trailing_punctuation(genny.gen_text(sentences_desired=1).split('\n')[0].strip()),  # New 'sentence' from corpus
-      lambda: th.strip_leading_and_trailing_punctuation(genny.gen_text(sentences_desired=1).split('\n')[0].strip()),  # New 'sentence' from corpus
-      lambda: th.strip_leading_and_trailing_punctuation(genny.gen_text(sentences_desired=1).split('\n')[0].strip()),  # New 'sentence' from corpus
+      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip(),
+      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip(),
+      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip(),
+      lambda: th.strip_leading_and_trailing_punctuation(genny.gen_text(sentences_desired=1).split('\n')[0].strip()),  # New 'sentence'
+      lambda: th.strip_leading_and_trailing_punctuation(genny.gen_text(sentences_desired=1).split('\n')[0].strip()),  # New 'sentence'
+      lambda: th.strip_leading_and_trailing_punctuation(genny.gen_text(sentences_desired=1).split('\n')[0].strip()),  # New 'sentence'
     ]
     title = random.choice(possible_titles)()
     while len(title) > 90:
