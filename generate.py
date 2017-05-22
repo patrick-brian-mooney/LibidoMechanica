@@ -39,7 +39,9 @@ def print_usage():    # Note that, currently, nothing calls this.
     print(__doc__)
 
 def get_title(the_poem):
-    """Get a title for the poem."""
+    """Get a title for the poem. There are several title-generating algorithms; this
+    function picks one at random.
+    """
     possible_titles = [
       lambda: "Untitled Poem # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
       lambda: "Untitled Composition # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
@@ -67,6 +69,21 @@ def get_title(the_poem):
         title = title + '’)'
     return title
 
+def validate_punctuation(the_poem):
+    """Cleans up the punctuation in the poems so that it appears to be more
+    'correct.' Since characters are generated randomly based on a frequency
+    analysis of which characters are likely to follow the last three to ten
+    characters, there's no guarantee that (for instance) parentheses or quotes
+    are balanced, because the generator doesn't pay attention to or understand
+    larger-scale structures.
+    
+    THE_POEM is a string, which is the text of the entire poem; the function 
+    returns a new, cleaned-up version of the poem passed in.
+    
+    NOT YET IMPLEMENTED.
+    """
+    return the_poem
+
 
 # Set up the basic parameters for the run
 sample_texts = random.sample(glob.glob(poetry_corpus + '/*txt'), random.randint(40,100))
@@ -82,12 +99,12 @@ poem_length = random.randint(4,20)              # in SENTENCES. Not lines.
 genny = pg.PoemGenerator(name='Libido Mechanica generator', training_texts=sample_texts, markov_length=chain_length)
 
 the_poem = genny.gen_text(sentences_desired=poem_length, paragraph_break_probability=0.2)
-the_title=get_title(the_poem)
+the_poem = validate_punctuation(the_poem)
+
+the_title = get_title(the_poem)
 
 formatted_poem = th.multi_replace(the_poem, [[' \n', '\n'],               # Eliminate any spurious end-of-line spaces
                                              ['\n\n\n', '\n\n']])         # ... and any extra line breaks.
-
-# FIXME: preserve beginning-of-line spacing
 
 # Add HTML <br /> to end of every line
 formatted_poem = '\n'.join([line.rstrip() + '<br />' for line in formatted_poem.split('\n')])
@@ -117,3 +134,4 @@ with bz2.BZ2File(os.path.join(post_archives, archive_name), mode='wb') as archiv
     archive_file.write(json.dumps(post_data, sort_keys=True, indent=3, ensure_ascii=False).encode())
 
 patrick_logger.log_it("INFO: We're done", 1)
+
