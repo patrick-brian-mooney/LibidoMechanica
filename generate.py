@@ -173,19 +173,19 @@ def balance_punctuation(the_poem, opening_char, closing_char):
                 elif nesting_level > 0:             # Are we currently in the middle of a bracketed block?
                     if next_char.isspace():             # Is the next character whitespace?
                         if random.random() < (0.001 * nesting_level):   # Low chance of closing the open bracketer
-                            indexed_poem.insert(index+1, closing_char)
+                            indexed_poem.insert(index, closing_char)
                             nesting_level -= 1
                     elif char in ['.', '?', '!'] and next_char.isspace():
                         if random.random() < (0.05 * nesting_level):    # Higher chance of closing the open bracketer
-                            indexed_poem.insert(index+1, closing_char)
+                            indexed_poem.insert(index, closing_char)
                             nesting_level -= 1
                     elif char in known_punctuation and last_char in ['.', '!', '?']:
                         if random.random() < (0.05 * nesting_level):
-                            indexed_poem.insert(index+1, closing_char)
+                            indexed_poem.insert(index, closing_char)
                             nesting_level -= 1
                     elif char == '\n' and next_char == '\n':            # Very high chance of closing on paragraph boundaries
                         if random.random() < (0.4 * nesting_level):
-                            indexed_poem.insert(index+1, closing_char)
+                            indexed_poem.insert(index, closing_char)
                             nesting_level -= 1
                     elif char == '\n':
                         if random.random() < (0.1 * nesting_level):
