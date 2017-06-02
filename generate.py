@@ -197,6 +197,7 @@ def balance_punctuation(the_poem, opening_char, closing_char):
                 else:
                     index += 1
             the_poem = ''.join(indexed_poem)
+    log_it("   ... after balancing, there are %d/%d punctuation marks." % (the_poem.count(opening_char), the_poem.count(closing_char)), 2)
     return the_poem
 
 def fix_punctuation(the_poem):
@@ -233,7 +234,8 @@ def do_basic_cleaning(the_poem):
 def do_final_cleaning(the_poem):
     log_it("INFO: about to do final cleaning of poem", 2)
     the_poem = th.multi_replace(the_poem, [[' \n', '\n'],           # Eliminate any spurious end-of-line spaces
-                                           ['\n\n\n', '\n\n']])     # ... and any extra line breaks.
+                                           ['\n\n\n', '\n\n'],
+                                           [r'\n\)', r'\)']])     # ... and any extra line breaks.
     poem_lines = the_poem.split('\n')
     index = 0
     while index < (len(poem_lines) - 1):                            # Go through, line by line, making any final changes.
