@@ -65,6 +65,8 @@ def get_title(the_poem):
       lambda: th.strip_leading_and_trailing_punctuation(genny.gen_text(sentences_desired=1).split('\n')[0].strip()),  # New 'sentence'
     ]
     title = random.choice(possible_titles)()
+    if len(title) < 3:                  # Try again, recursively.
+        title = get_title(the_poem)
     while len(title) > 90:
         words = title.split()
         title = ' '.join(words[:random.randint(3, min(12, len(words)))])
@@ -102,7 +104,7 @@ def curlify_quotes(the_poem, straight_quote, opening_quote, closing_quote):
 
     NOT FULLY TESTED, but I'm going to bed.
     """
-    log_it("INFO: curlify_quotes() called to differentiate %s into %s and %s" % (straight_quote, opening_quote, closing_quote), 2)
+    log_it("INFO: curlify_quotes() called to differentiate %s (%d) into %s and %s" % (straight_quote, the_poem.count(straight_quote), opening_quote, closing_quote), 2)
     assert len(straight_quote) == 1, "Quote characters passed to curify_quotes() must be one-character strings"
     assert len(opening_quote) == 1, "Quote characters passed to curify_quotes() must be one-character strings"
     assert len(closing_quote) == 1, "Quote characters passed to curify_quotes() must be one-character strings"
@@ -132,7 +134,7 @@ def curlify_quotes(the_poem, straight_quote, opening_quote, closing_quote):
 
 def balance_punctuation(the_poem, opening_char, closing_char):
     """Make sure that paired punctuation (smart quotes, parentheses, brackets) in the
-    poem are 'balanced.' If not, it attempts to correct them.
+    poem are 'balanced.' If not, it attempts to correct it.
     """
     opening, closing = the_poem.count(opening_char), the_poem.count(closing_char)
     if closing_char == '’':     # Sigh. We have to worry about apostrophes that look like closing single quotes.
@@ -145,7 +147,7 @@ def balance_punctuation(the_poem, opening_char, closing_char):
             nesting_level = 0   # How many levels deep are we right now in the punctuation we're tracking?
             indexed_poem = list(the_poem)
             index = 0
-            while index <= (len(indexed_poem) - 1):
+            while index <= (len(indexed_poem)-1):
                 char = indexed_poem[index]
                 next_char = '' if index == len(indexed_poem) -1 else indexed_poem[index + 1]
                 last_char = '' if index == 0 else indexed_poem[index - 1]
@@ -225,7 +227,28 @@ def do_basic_cleaning(the_poem):
     version of THE_POEM.
     """
     log_it("INFO: about to do basic pre-cleaning of poem", 2)
-    return th.multi_replace(the_poem, [[' \n', '\n'],]).strip()
+    the_poem = th.multi_replace(the_poem, [[' \n', '\n'],]).strip()
+    return the_poem
+
+def do_final_cleaning(the_poem):
+    log_it("INFO: about to do final cleaning of poem", 2)
+    the_poem = th.multi_replace(the_poem, [[' \n', '\n'],           # Eliminate any spurious end-of-line spaces
+                                           ['\n\n\n', '\n\n']])     # ... and any extra line breaks.
+    poem_lines = the_poem.split('\n')
+    index = 0
+    while index < (len(poem_lines) - 1):                            # Go through, line by line, making any final changes.
+        line = poem_lines[index]
+        if '  ' in line:                                                # Multiple whitespace in line? Break into multiple lines
+            individual_lines = ['  ' + i for i in line.split('  ')]
+            if len(individual_lines) > 1:
+                poem_lines.pop(index)
+                individual_lines.reverse()          # Go through the sub-lines backwards,
+                for l in individual_lines:
+                    poem_lines.insert(index, l)     # ... inserting lines and pushing the line stack up.     
+            index += len(individual_lines)
+        else:
+            index += 1
+    return '\n'.join(poem_lines)
 
 
 # Set up the basic parameters for the run
@@ -254,13 +277,11 @@ log_it("tags are: %s" % the_tags)
 log_it("INFO: cleaning poem up ...")
 the_poem = do_basic_cleaning(the_poem)
 the_poem = fix_punctuation(the_poem)
-
-formatted_poem = th.multi_replace(the_poem, [[' \n', '\n'],               # Eliminate any spurious end-of-line spaces
-                                             ['\n\n\n', '\n\n']])         # ... and any extra line breaks.
+the_poem = do_final_cleaning(the_poem) 
 
 log_it("INFO: HTML-izing poem ...")
 # Add HTML <br /> to end of every line
-formatted_poem = '\n'.join([line.rstrip() + '<br />' for line in formatted_poem.split('\n')])
+formatted_poem = '\n'.join([line.rstrip() + '<br />' for line in the_poem.split('\n')])
 # Wrap stanzas in <p> ... </p>
 formatted_poem = '\n'.join(['<p>%s</p>' % line for line in formatted_poem.split('<br />\n<br />')])
 # Pretty-print (for debugging only; doesn't matter for Tumblr upload, but neither does it cause problems)
