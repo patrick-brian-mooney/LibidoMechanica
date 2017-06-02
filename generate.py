@@ -16,9 +16,10 @@ GPL, either version 3, or (at your option) any later version; see the file
 LICENSE.md for more details.
 """
 
-import random, pprint, glob, os, datetime, json, bz2
+import random, pprint, glob, os, datetime, json, bz2, string, re
 
 import patrick_logger                                   # From https://github.com/patrick-brian-mooney/personal-library
+from patrick_logger import log_it
 import social_media                                     # From https://github.com/patrick-brian-mooney/personal-library
 from social_media_auth import libidomechanica_client    # Unshared file that contains authentication constants
 
@@ -33,25 +34,29 @@ poetry_corpus = '/LibidoMechanica/poetry_corpus'
 post_archives = '/LibidoMechanica/archives'
 
 
+known_punctuation = string.punctuation + "‘’“”"
+
+
 def print_usage():    # Note that, currently, nothing calls this.
     """Print the docstring as a usage message to stdout"""
-    patrick_logger.log_it("INFO: print_usage() was called")
+    log_it("INFO: print_usage() was called")
     print(__doc__)
 
 def get_title(the_poem):
     """Get a title for the poem. There are several title-generating algorithms; this
     function picks one at random.
     """
+    log_it("INFO: getting a title for the poem")
     possible_titles = [
       lambda: "Untitled Poem # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
       lambda: "Untitled Composition # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
       lambda: "Untitled # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
-      lambda: "Untitled ('%s')" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),
-      lambda: "Untitled ('%s')" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),
-      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),  # First line, in quotes
-      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),  # First line, in quotes
-      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),  # First line, in quotes
-      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip().strip(),  # First line, in quotes
+      lambda: "Untitled ('%s')" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip(),
+      lambda: "Untitled ('%s')" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip(),
+      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.strip().split('\n')[0]).strip(),  # First line, in quotes
+      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.strip().split('\n')[0]).strip(),  # First line, in quotes
+      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.strip().split('\n')[0]).strip(),  # First line, in quotes
+      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.strip().split('\n')[0]).strip(),  # First line, in quotes
       lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip(),
       lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip(),
       lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip(),
@@ -71,12 +76,13 @@ def get_title(the_poem):
 
 
 def strip_invalid_chars(the_poem):
-    """Some characters appear in the training texts but are characters that, I am 
+    """Some characters appear in the training texts but are characters that, I am
     declaring by fiat, should not make it into the final generated poems at all.
     The underscore is a good example of characters in this class. This function
     takes an entire poem as input (THE_POEM) and returns a poem entirely
     stripped of all such poems.
     """
+    log_it("INFO: stripping invalid characters from the poem")
     invalids = ['_', '*']
     return ''.join([s for s in the_poem if not s in invalids])
 
@@ -85,7 +91,7 @@ def curlify_quotes(the_poem, straight_quote, opening_quote, closing_quote):
     (a single-character string). When it finds these instances, it substitutes
     OPENING_QUOTE or CLOSING_QUOTE for them, trying to make good decisions about
     which of those substitutions is appropriate.
-    
+
     IMPORTANT CAVEAT: this routine iterates over THE_POEM, making in-place
     changes at locations determined via an initial scan. This means that
     OPENING_QUOTE and CLOSING_QUOTE **absolutely must** have the same len() as
@@ -93,9 +99,10 @@ def curlify_quotes(the_poem, straight_quote, opening_quote, closing_quote):
     problem with standard English quotes under Python 3.X; but it may fail under
     non-Roman scripts, in odd edge cases, or if the function is used to try to
     do something other than curlify quotes.
-    
+
     NOT FULLY TESTED, but I'm going to bed.
-    """    
+    """
+    log_it("INFO: curlify_quotes() called to differentiate %s into %s and %s" % (straight_quote, opening_quote, closing_quote), 2)
     assert len(straight_quote) == 1, "Quote characters passed to curify_quotes() must be one-character strings"
     assert len(opening_quote) == 1, "Quote characters passed to curify_quotes() must be one-character strings"
     assert len(closing_quote) == 1, "Quote characters passed to curify_quotes() must be one-character strings"
@@ -109,9 +116,9 @@ def curlify_quotes(the_poem, straight_quote, opening_quote, closing_quote):
         elif index == len(the_poem):                                        # Is it the last character of the poem?
             the_poem = the_poem[:-1] + closing_quote
         elif the_poem[index-1].isspace() and the_poem[index+1].isspace():   # Whitespace on both sides? Replace quote with space.
-            the_poem = the_poem[:index] + ' ' + the_poem[1+index:]                  
+            the_poem = the_poem[:index] + ' ' + the_poem[1+index:]
         elif not the_poem[index-1].isspace():                               # Non-whitespace immediately before quote? It's a closing quote.
-            the_poem = the_poem[:index] + closing_quote + the_poem[index+1:]        
+            the_poem = the_poem[:index] + closing_quote + the_poem[index+1:]
         elif not the_poem[index+1].isspace():                               # Non-whitespace just after quote? It's an opening quote.
             the_poem = the_poem[:index] + opening_quote + the_poem[index+1:]
         else:                                                               # Quote appears in middle of non-whitespace text ...
@@ -122,37 +129,102 @@ def curlify_quotes(the_poem, straight_quote, opening_quote, closing_quote):
             else:
                 raise NotImplementedError                                           # We don't know how to deal with this quote.
     return the_poem
-    
-def balance_quotes(the_poem):
-    """Make sure that quotes in the poem are 'balanced.' Takes a poem, turns
-    straight quotes into smart quotes, and then checks to see whether those
-    quotes match. If not, it corrects them.
-    
-    NOT YET IMPLEMENTED."""
+
+def balance_punctuation(the_poem, opening_char, closing_char):
+    """Make sure that paired punctuation (smart quotes, parentheses, brackets) in the
+    poem are 'balanced.' If not, it attempts to correct them.
+    """
+    opening, closing = the_poem.count(opening_char), the_poem.count(closing_char)
+    if closing_char == '’':     # Sigh. We have to worry about apostrophes that look like closing single quotes.
+        closing -= len(re.findall('[:alnum:]*’[:alnum:]', the_poem))    # Inside a word? It's an apostrophe. Don't count it
+
+    log_it("INFO: Balancing %s and %s (%d/%d)" % (opening_char, closing_char, opening, closing))
+
+    if opening or closing:      # Do nothing if there's no instances of either character
+        if opening != closing:  # Do nothing if we already have equal numbers (even if not properly "balanced")
+            nesting_level = 0   # How many levels deep are we right now in the punctuation we're tracking?
+            indexed_poem = list(the_poem)
+            index = 0
+            while index <= (len(indexed_poem) - 1):
+                char = indexed_poem[index]
+                next_char = '' if index == len(indexed_poem) -1 else indexed_poem[index + 1]
+                last_char = '' if index == 0 else indexed_poem[index - 1]
+                if index == (len(indexed_poem)-1) :  # End of the poem?
+                    if nesting_level > 0:               # Close any open characters.
+                        indexed_poem += [closing_char]
+                        nesting_level -= 1
+                    index += 1
+                elif char == opening_char:          # Opening character?
+                    if index == len(indexed_poem):      # Last character is an opening character?
+                        indexed_poem.pop(-1)            # Just drop it.
+                    else:
+                        nesting_level += 1              # We're one level deeper
+                        index += 1                          # Move on to next character
+                elif char == closing_char:          # Closing character?
+                    if (closing_char == '’') and (th.is_alphanumeric(next_char) and th.is_alphanumeric(last_char)):
+                        index += 1      # Skip apostrophes in the middle of words
+                    else:
+                        if nesting_level < 1:               # Are we trying to close something that's not open?
+                            indexed_poem.pop(index)         # Just drop the spurious close quote
+                        else:
+                            if next_char.isspace():             # Avoid non-quote apostrophes in middle of words.
+                                nesting_level -= 1          # We're one level less deep
+                            index += 1                      # Move on to next character
+                elif nesting_level > 0:             # Are we currently in the middle of a bracketed block?
+                    if next_char.isspace():             # Is the next character whitespace?
+                        if random.random() < (0.001 * nesting_level):   # Low chance of closing the open bracketer
+                            indexed_poem.insert(index+1, closing_char)
+                            nesting_level -= 1
+                    elif char in ['.', '?', '!'] and next_char.isspace():
+                        if random.random() < (0.05 * nesting_level):    # Higher chance of closing the open bracketer
+                            indexed_poem.insert(index+1, closing_char)
+                            nesting_level -= 1
+                    elif char in known_punctuation and last_char in ['.', '!', '?']:
+                        if random.random() < (0.05 * nesting_level):
+                            indexed_poem.insert(index+1, closing_char)
+                            nesting_level -= 1
+                    elif char == '\n' and next_char == '\n':            # Very high chance of closing on paragraph boundaries
+                        if random.random() < (0.4 * nesting_level):
+                            indexed_poem.insert(index+1, closing_char)
+                            nesting_level -= 1
+                    elif char == '\n':
+                        if random.random() < (0.1 * nesting_level):
+                            indexed_poem.insert(index, closing_char)
+                            nesting_level -= 1
+                    index += 1
+                else:
+                    index += 1
+            the_poem = ''.join(indexed_poem)
     return the_poem
 
-def validate_punctuation(the_poem):
+def fix_punctuation(the_poem):
     """Cleans up the punctuation in the poems so that it appears to be more
     'correct.' Since characters are generated randomly based on a frequency
     analysis of which characters are likely to follow the last three to ten
     characters, there's no guarantee that (for instance) parentheses or quotes
     are balanced, because the generator doesn't pay attention to or understand
     larger-scale structures.
-    
-    THE_POEM is a string, which is the text of the entire poem; the function 
+
+    THE_POEM is a string, which is the text of the entire poem; the function
     returns a new, cleaned-up version of the poem passed in.
-    
+
     NOT YET FULLY IMPLEMENTED.
     """
+    log_it("INFO: about to alter punctuation", 2)
     the_poem = strip_invalid_chars(the_poem)
     the_poem = curlify_quotes(the_poem, "'", "‘", "’")
-    the_poem = curlify_quotes(the_poem, '"', '“', '”')    
-    return balance_quotes(the_poem)
+    the_poem = curlify_quotes(the_poem, '"', '“', '”')
+    the_poem = balance_punctuation(the_poem, "‘", "’")
+    the_poem = balance_punctuation(the_poem,  '“', '”')
+    the_poem = balance_punctuation(the_poem,  '(', ')')
+    the_poem = balance_punctuation(the_poem,  '[', ']')
+    return balance_punctuation(the_poem,  '{', '}')
 
 def do_basic_cleaning(the_poem):
     """Does first-pass elementary cleanup tasks on THE_POEM. Returns the cleaned
     version of THE_POEM.
     """
+    log_it("INFO: about to do basic pre-cleaning of poem", 2)
     return th.multi_replace(the_poem, [[' \n', '\n'],]).strip()
 
 
@@ -167,17 +239,26 @@ the_tags = ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov 
 
 poem_length = random.randint(4,20)              # in SENTENCES. Not lines.
 
+log_it("INFO: about to set up and train text generator ...")
 genny = pg.PoemGenerator(name='Libido Mechanica generator', training_texts=sample_texts, markov_length=chain_length)
 
+log_it("INFO: about to generate poem ...")
 the_poem = genny.gen_text(sentences_desired=poem_length, paragraph_break_probability=0.2)
-the_poem = do_basic_cleaning(the_poem)
-the_poem = validate_punctuation(the_poem)
 
 the_title = get_title(the_poem)
+
+log_it("poem generated; title is: %s" % the_title)
+log_it("lines are: \n\n" + the_poem)
+log_it("tags are: %s" % the_tags)
+
+log_it("INFO: cleaning poem up ...")
+the_poem = do_basic_cleaning(the_poem)
+the_poem = fix_punctuation(the_poem)
 
 formatted_poem = th.multi_replace(the_poem, [[' \n', '\n'],               # Eliminate any spurious end-of-line spaces
                                              ['\n\n\n', '\n\n']])         # ... and any extra line breaks.
 
+log_it("INFO: HTML-izing poem ...")
 # Add HTML <br /> to end of every line
 formatted_poem = '\n'.join([line.rstrip() + '<br />' for line in formatted_poem.split('\n')])
 # Wrap stanzas in <p> ... </p>
@@ -185,19 +266,15 @@ formatted_poem = '\n'.join(['<p>%s</p>' % line for line in formatted_poem.split(
 # Pretty-print (for debugging only; doesn't matter for Tumblr upload, but neither does it cause problems)
 formatted_poem = th.multi_replace(formatted_poem, [['<p>\n', '\n<p>']])
 # Prevent all spaces from collapsing; get rid of spurious paragraphs
-formatted_poem = th.multi_replace(formatted_poem, [[' ', '&nbsp;'], ['<p></p>', '']])
+formatted_poem = th.multi_replace(formatted_poem, [[' ', '&nbsp;'], ['<p></p>', ''], ['<p>\n</p>', '']])
 # formatted_poem = "<pre>\n%s\n</pre>" % formatted_poem         # OK, that looks really ugly.
 
-patrick_logger.log_it("poem generated; title is: %s" % the_title)
-patrick_logger.log_it("lines are: \n\n" + the_poem)
-patrick_logger.log_it("tags are: %s" % the_tags)
-
-# All right, we're ready. Let's go.
-patrick_logger.log_it('INFO: Attempting to post the content', 2)
+log_it('INFO: Attempting to post the content...')
 the_status, the_tumblr_data = social_media.tumblr_text_post(libidomechanica_client, ', '.join(the_tags), the_title, formatted_poem)
-patrick_logger.log_it('INFO: the_status is: ' + pprint.pformat(the_status), 2)
+log_it('INFO: the_status is: ' + pprint.pformat(the_status), 2)
+log_it('INFO: the_tumblr_data is: ' + pprint.pformat(the_tumblr_data), 3)
 
-# Archive the generated post
+log_it("INFO: archiving poem and metadata ...")
 post_data = {'title': the_title, 'text': the_poem, 'time': datetime.datetime.now().isoformat() }
 post_data['formatted_text'], post_data['tags'], post_data['sources'] = formatted_poem, the_tags, sorted(source_texts)
 post_data['status_code'], post_data['tumblr_data'] = the_status, the_tumblr_data
@@ -205,5 +282,5 @@ archive_name = "%s — %s.json.bz2" % (post_data['time'], the_title)
 with bz2.BZ2File(os.path.join(post_archives, archive_name), mode='wb') as archive_file:
     archive_file.write(json.dumps(post_data, sort_keys=True, indent=3, ensure_ascii=False).encode())
 
-patrick_logger.log_it("INFO: We're done", 1)
+log_it("INFO: We're done")
 
