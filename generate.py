@@ -181,10 +181,14 @@ def balance_punctuation(the_poem, opening_char, closing_char):
                         if random.random() < (0.05 * nesting_level):    # Higher chance of closing the open bracketer
                             indexed_poem.insert(index, closing_char)
                             nesting_level -= 1
+                            if random.random() < 0.2:                       # Force new paragraph break?
+                                indexed_poem.insert(index + 1, '\n')
                     elif char in known_punctuation and last_char in ['.', '!', '?']:
                         if random.random() < (0.05 * nesting_level):
                             indexed_poem.insert(index, closing_char)
                             nesting_level -= 1
+                            if random.random() < 0.2:                       # Force new paragraph break?
+                                indexed_poem.insert(index + 1, '\n')
                     elif char == '\n' and next_char == '\n':            # Very high chance of closing on paragraph boundaries
                         if random.random() < (0.4 * nesting_level):
                             indexed_poem.insert(index, closing_char)
@@ -235,13 +239,13 @@ def do_final_cleaning(the_poem):
     log_it("INFO: about to do final cleaning of poem", 2)
     the_poem = th.multi_replace(the_poem, [[' \n', '\n'],           # Eliminate any spurious end-of-line spaces
                                            ['\n\n\n', '\n\n'],
-                                           [r'\n\)', r'\)']])     # ... and any extra line breaks.
+                                           [r'\n\)', r')']])     # ... and any extra line breaks.
     poem_lines = the_poem.split('\n')
     index = 0
     while index < (len(poem_lines) - 1):                            # Go through, line by line, making any final changes.
         line = poem_lines[index]
         if '  ' in line:                                                # Multiple whitespace in line? Break into multiple lines
-            individual_lines = ['  ' + i for i in line.split('  ')]
+            individual_lines = ['  ' + i + '\n' for i in line.split('  ')]
             if len(individual_lines) > 1:
                 poem_lines.pop(index)
                 individual_lines.reverse()          # Go through the sub-lines backwards,
