@@ -286,6 +286,8 @@ the_poem = fix_punctuation(the_poem)
 the_poem = do_final_cleaning(the_poem) 
 
 log_it("INFO: HTML-izing poem ...")
+# Force all spaces to be non-breaking spaces
+formatted_poem = th.multi_replace(the_poem, [[' ', '&nbsp;']])
 # Add HTML <br /> to end of every line
 formatted_poem = '\n'.join([line.rstrip() + '<br />' for line in the_poem.split('\n')])
 # Wrap stanzas in <p> ... </p>
@@ -293,7 +295,7 @@ formatted_poem = '\n'.join(['<p>%s</p>' % line for line in formatted_poem.split(
 # Pretty-print (for debugging only; doesn't matter for Tumblr upload, but neither does it cause problems)
 formatted_poem = th.multi_replace(formatted_poem, [['<p>\n', '\n<p>']])
 # Prevent all spaces from collapsing; get rid of spurious paragraphs
-formatted_poem = th.multi_replace(formatted_poem, [[' ', '&nbsp;'], ['<p></p>', ''], ['<p>\n</p>', '']])
+formatted_poem = th.multi_replace(formatted_poem, [['<p></p>', ''], ['<p>\n</p>', '']])
 # formatted_poem = "<pre>\n%s\n</pre>" % formatted_poem         # OK, that looks really ugly.
 
 log_it('INFO: Attempting to post the content...')
