@@ -16,7 +16,7 @@ GPL, either version 3, or (at your option) any later version; see the file
 LICENSE.md for more details.
 """
 
-import random, pprint, glob, os, datetime, json, bz2, string, re
+import bz2, datetime, functools, glob, json, os, pprint, random, re, string
 
 import patrick_logger                                   # From https://github.com/patrick-brian-mooney/personal-library
 from patrick_logger import log_it
@@ -35,6 +35,8 @@ post_archives = '/LibidoMechanica/archives'
 
 
 known_punctuation = string.punctuation + "‘’“”"
+
+normalization_strategy, stanza_length = None, None
 
 
 def print_usage():    # Note that, currently, nothing calls this.
@@ -82,7 +84,7 @@ def strip_invalid_chars(the_poem):
     declaring by fiat, should not make it into the final generated poems at all.
     The underscore is a good example of characters in this class. This function
     takes an entire poem as input (THE_POEM) and returns a poem entirely
-    stripped of all such poems.
+    stripped of all such characters.
     """
     log_it("INFO: stripping invalid characters from the poem")
     invalids = ['_', '*']
@@ -232,8 +234,97 @@ def do_basic_cleaning(the_poem):
     version of THE_POEM.
     """
     log_it("INFO: about to do basic pre-cleaning of poem", 2)
-    the_poem = th.multi_replace(the_poem, [[' \n', '\n'],]).strip()
+    the_poem = th.multi_replace(the_poem, [[' \n', '\n'], ['\n\?', '?'], ['\n!', '!'],
+                                           ['\n"', '\n'], ['\n”', '\n']]).strip()
     return the_poem
+
+def factors(n):
+    """Return a list of the factors of a number. Based on code at
+    < https://stackoverflow.com/a/6800214 >.
+    """
+    assert (int(n) == n and n > 1), "ERROR: factors() called on %s, which is not a positive integer" % n
+    return sorted(list(set(functools.reduce(list.__add__, ([i, n//i] for i in range(1, int(n**0.5) + 1) if n % i == 0)))))
+
+def is_prime(n):
+    """Return True if N is prime, false otherwise. "Prime" is here defined specifically
+    as "has fewer than three factors," which is not quite the same as mathematical
+    ... um, primery. Primeness. Anyway, this is intended to be inclusive about edge
+    cases that "is it prime?" should often include.
+    """
+    assert (int(n) == n and n > 1), "ERROR: is_prime() called on %s, which is not a positive integer" % n
+    return (len(factors(n)) < 3)
+
+def lines_without_stanza_breaks(the_poem):
+    """Returns a *list* of lines from THE_POEM, removing any stanza breaks.
+    """
+    return [l for l in the_poem.split('\n') if len(l.strip()) > 0]
+
+def total_lines(the_poem):
+    """Returns the total number of non-empty lines in the poem."""
+    return len(lines_without_stanza_breaks(the_poem))
+
+def reduce_single_lines(the_poem):
+    """Takes the poem passed as THE_POEM and goes through it, (mostly) eliminating
+    single-line stanzas. Returns the corrected poem.
+
+    #FIXME: does not yet do anything productive.
+    """
+    stanzas = [l.split('\n') for l in the_poem.split('\n\n')]   # A list of stanzas, each of which is a list of lines
+    i = 0
+    while i < len(stanzas):
+        if len(stanzas[i]) < 3:
+            try:                                # Combine it with the next stanza. Probably.
+                if random.random() <= 0.85:
+                    next_stanza = stanzas.pop(i+1)
+                    stanzas[i] += next_stanza
+                else: i += 1
+            except IndexError:                  # If there is no next stanza, oh well.
+                pass
+        else:
+            i += 1
+    return '\n\n'.join(['\n'.join(s) for s in stanzas])
+
+def regularize_stanza_length(the_poem):
+    """Reconfigures stanza breaks in THE_POEM so that it has stanzas of a regular
+    length. Returns the modified poem with regular stanzas. Tries to choose a
+    reasonable stanza length, but (if all else fails) will just produce one long
+    undivided poem.
+    """
+    global stanza_length
+    textual_lines = lines_without_stanza_breaks(the_poem)
+    num_lines = len(textual_lines)
+    # assert (not is_prime(num_lines)), "ERROR: regularize_stanza_length() called for poem with prime number of lines"
+    possible_stanza_lengths = factors(num_lines)
+    if len([x for x in possible_stanza_lengths if x >= 3]):     # If possible, prefer stanzas at least as long as Dante's in the Divine Comedy.
+        possible_stanza_lengths = [x for x in possible_stanza_lengths if x >= 3]
+    if len([x for x in possible_stanza_lengths if x <= 16]):    # If possible, choose a stanza length no longer than Meredith's extended sonnets in /Modern Love/.
+        possible_stanza_lengths = [x for x in possible_stanza_lengths if x <= 16]
+    stanza_length = random.choice(possible_stanza_lengths)
+    if stanza_length == 1: stanza_length = num_lines            # 1 long stanza, not many one-line stanzas
+    the_poem = ""
+    for stanza in range(0, num_lines // stanza_length):         # Iterate over the appropriate # of stanzas
+        for line in range(0, stanza_length):
+            the_poem += "%s\n" % textual_lines.pop()
+        the_poem += '\n'                                        # Add stanza break
+    return the_poem
+
+def regularize_form(the_poem):
+    """Choose one of several strategies to regularize the form of the poem. Note that
+    one of these strategies is 'do nothing'.
+    """
+    global normalization_strategy
+    possible_strategies = [
+        ('regular stanza length (experimental)', lambda x: regularize_stanza_length(x)),
+        ('regular stanza length (experimental)', lambda x: regularize_stanza_length(x)),
+        ('regular stanza length (experimental)', lambda x: regularize_stanza_length(x)),
+        ('regular stanza length (experimental)', lambda x: regularize_stanza_length(x)),
+        (None, lambda x: x),
+        ('reduce single lines (experimental)', lambda x: reduce_single_lines(x)),
+        ('reduce single lines (experimental)', lambda x: reduce_single_lines(x)),
+    ]
+    normalization_strategy, normalization_procedure = random.choice(possible_strategies)
+    log_it("INFO: form normalization strategy is: %s" % normalization_strategy, 2)
+    return normalization_procedure(the_poem)
 
 def do_final_cleaning(the_poem):
     log_it("INFO: about to do final cleaning of poem", 2)
@@ -244,72 +335,74 @@ def do_final_cleaning(the_poem):
     index = 0
     while index < (len(poem_lines) - 1):                            # Go through, line by line, making any final changes.
         line = poem_lines[index]
-        if '  ' in line:                                                # Multiple whitespace in line? Break into multiple lines
+        if '  ' in line.strip():                                    # Multiple whitespace in line? Break into multiple lines
             individual_lines = ['  ' + i + '\n' for i in line.split('  ')]
             if len(individual_lines) > 1:
                 poem_lines.pop(index)
                 individual_lines.reverse()          # Go through the sub-lines backwards,
                 for l in individual_lines:
-                    poem_lines.insert(index, l)     # ... inserting lines and pushing the line stack up.     
+                    poem_lines.insert(index, l)     # ... inserting lines and pushing the line stack up.
             index += len(individual_lines)
         else:
             index += 1
-    return '\n'.join(poem_lines)
+    the_poem = '\n'.join(poem_lines)
+    return regularize_form(the_poem)
 
 
-# Set up the basic parameters for the run
-sample_texts = random.sample(glob.glob(poetry_corpus + '/*txt'), random.randint(40,100))
-chain_length = random.choice([3, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 7, 7, 7, 8, 9, 10])
+if __name__ == "__main__":
+    # Set up the basic parameters for the run
+    sample_texts = random.sample(glob.glob(poetry_corpus + '/*txt'), random.randint(40,100))
+    chain_length = random.choice([3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 8, 8, 9, 10])
 
-# And add their names to the list of tags, plus track sources of this particular poem
-source_texts = [ os.path.splitext(th.remove_prefix(os.path.basename(t), "Link to ").strip())[0] for t in sample_texts ]
-the_tags = ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains'] + \
-           ['Markov chain length: %d' % chain_length, '%d texts' % len(sample_texts) ]
+    # And add their names to the list of tags, plus track sources of this particular poem
+    source_texts = [ os.path.splitext(th.remove_prefix(os.path.basename(t), "Link to ").strip())[0] for t in sample_texts ]
+    the_tags = ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains'] + \
+               ['Markov chain length: %d' % chain_length, '%d texts' % len(sample_texts) ]
 
-poem_length = random.randint(4,20)              # in SENTENCES. Not lines.
+    poem_length = random.randint(4,20)              # in SENTENCES. Not lines.
 
-log_it("INFO: about to set up and train text generator ...")
-genny = pg.PoemGenerator(name='Libido Mechanica generator', training_texts=sample_texts, markov_length=chain_length)
+    log_it("INFO: about to set up and train text generator ...")
+    genny = pg.PoemGenerator(name='Libido Mechanica generator', training_texts=sample_texts, markov_length=chain_length)
 
-log_it("INFO: about to generate poem ...")
-the_poem = genny.gen_text(sentences_desired=poem_length, paragraph_break_probability=0.2)
+    log_it("INFO: about to generate poem ...")
+    the_poem = genny.gen_text(sentences_desired=poem_length, paragraph_break_probability=0.2)
 
-the_title = get_title(the_poem)
+    the_title = get_title(the_poem)
 
-log_it("poem generated; title is: %s" % the_title)
-log_it("lines are: \n\n" + the_poem)
-log_it("tags are: %s" % the_tags)
+    log_it("poem generated; title is: %s" % the_title)
+    log_it("lines are: \n\n" + the_poem)
+    log_it("tags are: %s" % the_tags)
 
-log_it("INFO: cleaning poem up ...")
-the_poem = do_basic_cleaning(the_poem)
-the_poem = fix_punctuation(the_poem)
-the_poem = do_final_cleaning(the_poem) 
+    log_it("INFO: cleaning poem up ...")
+    the_poem = do_basic_cleaning(the_poem)
+    the_poem = fix_punctuation(the_poem)
+    the_poem = do_final_cleaning(the_poem)
 
-log_it("INFO: HTML-izing poem ...")
-# Force all spaces to be non-breaking spaces
-formatted_poem = th.multi_replace(the_poem, [[' ', '&nbsp;']])
-# Add HTML <br /> to end of every line
-formatted_poem = '\n'.join([line.rstrip() + '<br />' for line in the_poem.split('\n')])
-# Wrap stanzas in <p> ... </p>
-formatted_poem = '\n'.join(['<p>%s</p>' % line for line in formatted_poem.split('<br />\n<br />')])
-# Pretty-print (for debugging only; doesn't matter for Tumblr upload, but neither does it cause problems)
-formatted_poem = th.multi_replace(formatted_poem, [['<p>\n', '\n<p>']])
-# Prevent all spaces from collapsing; get rid of spurious paragraphs
-formatted_poem = th.multi_replace(formatted_poem, [['<p></p>', ''], ['<p>\n</p>', '']])
-# formatted_poem = "<pre>\n%s\n</pre>" % formatted_poem         # OK, that looks really ugly.
+    log_it("INFO: HTML-izing poem ...")
+    # Force all spaces to be non-breaking spaces
+    formatted_poem = th.multi_replace(the_poem, [[' ', '&nbsp;']])
+    # Add HTML <br /> to end of every line
+    formatted_poem = '\n'.join([line.rstrip() + '<br />' for line in the_poem.split('\n')])
+    # Wrap stanzas in <p> ... </p>
+    formatted_poem = '\n'.join(['<p>%s</p>' % line for line in formatted_poem.split('<br />\n<br />')])
+    # Pretty-print (for debugging only; doesn't matter for Tumblr upload, but neither does it cause problems)
+    formatted_poem = th.multi_replace(formatted_poem, [['<p>\n', '\n<p>']])
+    # Prevent all spaces from collapsing; get rid of spurious paragraphs
+    formatted_poem = th.multi_replace(formatted_poem, [['<p></p>', ''], ['<p>\n</p>', '']])
+    # formatted_poem = "<pre>\n%s\n</pre>" % formatted_poem         # OK, that looks really ugly when it posts.
 
-log_it('INFO: Attempting to post the content...')
-the_status, the_tumblr_data = social_media.tumblr_text_post(libidomechanica_client, ', '.join(the_tags), the_title, formatted_poem)
-log_it('INFO: the_status is: ' + pprint.pformat(the_status), 2)
-log_it('INFO: the_tumblr_data is: ' + pprint.pformat(the_tumblr_data), 3)
+    log_it('INFO: Attempting to post the content...')
+    the_status, the_tumblr_data = social_media.tumblr_text_post(libidomechanica_client, ', '.join(the_tags), the_title, formatted_poem)
+    log_it('INFO: the_status is: ' + pprint.pformat(the_status), 2)
+    log_it('INFO: the_tumblr_data is: ' + pprint.pformat(the_tumblr_data), 3)
 
-log_it("INFO: archiving poem and metadata ...")
-post_data = {'title': the_title, 'text': the_poem, 'time': datetime.datetime.now().isoformat() }
-post_data['formatted_text'], post_data['tags'], post_data['sources'] = formatted_poem, the_tags, sorted(source_texts)
-post_data['status_code'], post_data['tumblr_data'] = the_status, the_tumblr_data
-archive_name = "%s — %s.json.bz2" % (post_data['time'], the_title)
-with bz2.BZ2File(os.path.join(post_archives, archive_name), mode='wb') as archive_file:
-    archive_file.write(json.dumps(post_data, sort_keys=True, indent=3, ensure_ascii=False).encode())
+    log_it("INFO: archiving poem and metadata ...")
+    post_data = {'title': the_title, 'text': the_poem, 'time': datetime.datetime.now().isoformat() }
+    post_data['formatted_text'], post_data['tags'], post_data['sources'] = formatted_poem, the_tags, sorted(source_texts)
+    post_data['status_code'], post_data['tumblr_data'] = the_status, the_tumblr_data
+    post_data['normalization strategy'], post_data['stanza length'] = normalization_strategy, stanza_length
+    archive_name = "%s — %s.json.bz2" % (post_data['time'], the_title)
+    with bz2.BZ2File(os.path.join(post_archives, archive_name), mode='wb') as archive_file:
+        archive_file.write(json.dumps(post_data, sort_keys=True, indent=3, ensure_ascii=False).encode())
 
-log_it("INFO: We're done")
-
+    log_it("INFO: We're done")
