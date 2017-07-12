@@ -304,7 +304,7 @@ def regularize_stanza_length(the_poem):
     the_poem = ""
     for stanza in range(0, num_lines // stanza_length):         # Iterate over the appropriate # of stanzas
         for line in range(0, stanza_length):
-            the_poem += "%s\n" % textual_lines.pop()
+            the_poem += "%s\n" % textual_lines.pop(0)
         the_poem += '\n'                                        # Add stanza break
     return the_poem
 
@@ -328,9 +328,13 @@ def regularize_form(the_poem):
 
 def do_final_cleaning(the_poem):
     log_it("INFO: about to do final cleaning of poem", 2)
-    the_poem = th.multi_replace(the_poem, [[' \n', '\n'],           # Eliminate any spurious end-of-line spaces
-                                           ['\n\n\n', '\n\n'],
-                                           [r'\n\)', r')']])     # ... and any extra line breaks.
+    the_poem = th.multi_replace(the_poem, [[' \n', '\n'],               # Eliminate any spurious end-of-line spaces
+                                           ['\n\n\n', '\n\n'],          # ... and any extra line breaks.
+                                           [r'\n\)', r')'],             # And line breaks right before ending punctuation
+                                           [' \n', '\n'], ['\n\?', '?'], ['\n!', '!'],
+                                           ['\n"', '\n'], ['\n”', '\n'], ['\n’', '’'],
+                                           ['“\n', '“'], ['"\n', '"'],  # And line breaks right after beginning punctuation
+                                          ])
     poem_lines = the_poem.split('\n')
     index = 0
     while index < (len(poem_lines) - 1):                            # Go through, line by line, making any final changes.
