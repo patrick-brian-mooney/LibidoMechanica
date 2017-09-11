@@ -235,7 +235,8 @@ def do_basic_cleaning(the_poem):
     """
     log_it("INFO: about to do basic pre-cleaning of poem", 2)
     the_poem = th.multi_replace(the_poem, [[' \n', '\n'], ['\n\?', '?'], ['\n!', '!'],
-                                           ['\n"', '\n'], ['\n”', '\n']]).strip()
+                                           ['\n"', '\n'], ['\n”', '\n'], ['\n\n\n', '\n\n'],
+                                           ['\n" ', '\n"'], ['^" ', '"']]).strip()
     return the_poem
 
 def factors(n):
@@ -389,6 +390,8 @@ if __name__ == "__main__":
     formatted_poem = '\n'.join([line.rstrip() + '<br />' for line in the_poem.split('\n')])
     # Wrap stanzas in <p> ... </p>
     formatted_poem = '\n'.join(['<p>%s</p>' % line for line in formatted_poem.split('<br />\n<br />')])
+    # Eliminate extra line breaks at the very beginning of paragraphs
+    formatted_poem = th.multi_replace(formatted_poem, [['<p><br />\n', '<p>'], ['<p>\n', '<p>'], ['<p>\n', '<p>']])
     # Pretty-print (for debugging only; doesn't matter for Tumblr upload, but neither does it cause problems)
     formatted_poem = th.multi_replace(formatted_poem, [['<p>\n', '\n<p>']])
     # Prevent all spaces from collapsing; get rid of spurious paragraphs
