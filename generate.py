@@ -356,7 +356,7 @@ def do_final_cleaning(the_poem):
 
 if __name__ == "__main__":
     # Set up the basic parameters for the run
-    sample_texts = random.sample(glob.glob(poetry_corpus + '/*txt'), random.randint(40,100))
+    sample_texts = random.sample([f for f in glob.glob(poetry_corpus + '/*') if not os.path.isdir(f)], random.randint(40,100))
     chain_length = random.choice([3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 8, 8, 9, 10])
 
     # And add their names to the list of tags, plus track sources of this particular poem
