@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Script to post to LibidoMechanica.tumblr.com. Really rough sketch of a
 script here. Not really meant for public use. Based on my earlier script to
 do a similar job for the AutoLovecraft Tumblr account; see
@@ -20,8 +21,11 @@ import bz2, datetime, functools, glob, json, os, pprint, random, re, string
 
 import patrick_logger                                   # From https://github.com/patrick-brian-mooney/personal-library
 from patrick_logger import log_it
+
 import social_media                                     # From https://github.com/patrick-brian-mooney/personal-library
 from social_media_auth import libidomechanica_client    # Unshared file that contains authentication constants
+
+import searcher                                         # https://github.com/patrick-brian-mooney/python-personal-library/blob/master/searcher.py
 
 import poetry_generator as pg                           # https://github.com/patrick-brian-mooney/markov-sentence-generator
 
@@ -44,15 +48,18 @@ def print_usage():    # Note that, currently, nothing calls this.
     log_it("INFO: print_usage() was called")
     print(__doc__)
 
+def count_previous_untitled_poems():
+    return len([x for x in searcher.get_files_list(post_archives,None) if 'untitled' in x.lower()])
+
 def get_title(the_poem):
     """Get a title for the poem. There are several title-generating algorithms; this
     function picks one at random.
     """
     log_it("INFO: getting a title for the poem")
     possible_titles = [
-      lambda: "Untitled Poem # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
-      lambda: "Untitled Composition # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
-      lambda: "Untitled # %d" % (1 + len(glob.glob(post_archives + '/*Untitled*'))),
+      lambda: "Untitled Poem # %d" % (1 + count_previous_untitled_poems()),
+      lambda: "Untitled Composition # %d" % (1 + count_previous_untitled_poems()),
+      lambda: "Untitled # %d" % (1 + count_previous_untitled_poems()),
       lambda: "Untitled ('%s')" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip(),
       lambda: "Untitled ('%s')" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip(),
       lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.strip().split('\n')[0]).strip(),  # First line, in quotes
