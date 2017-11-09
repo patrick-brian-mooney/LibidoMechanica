@@ -83,7 +83,7 @@ def get_title(the_poem):
         title = title + '’'
     if '(‘' in title and not '’)' in title:
         title = title + '’)'
-    return title
+    return fix_punctuation(title)
 
 
 def strip_invalid_chars(the_poem):
