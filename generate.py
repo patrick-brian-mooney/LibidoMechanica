@@ -60,8 +60,8 @@ def get_title(the_poem):
       lambda: "Untitled Poem # %d" % (1 + count_previous_untitled_poems()),
       lambda: "Untitled Composition # %d" % (1 + count_previous_untitled_poems()),
       lambda: "Untitled # %d" % (1 + count_previous_untitled_poems()),
-      lambda: "Untitled ('%s')" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip(),
-      lambda: "Untitled ('%s')" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip(),
+      lambda: "Untitled (‘%s’)" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip(),
+      lambda: "Untitled (‘%s’)" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip(),
       lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.strip().split('\n')[0]).strip(),  # First line, in quotes
       lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.strip().split('\n')[0]).strip(),  # First line, in quotes
       lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.strip().split('\n')[0]).strip(),  # First line, in quotes
