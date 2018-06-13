@@ -259,7 +259,7 @@ def is_prime(n):
     ... um, primery. Primeness. Anyway, this is intended to be inclusive about edge
     cases that "is it prime?" should often include.
     """
-    assert (int(n) == n and n > 1), "ERROR: is_prime() called on %s, which is not a positive integer" % n
+    assert (int(n) == n and n >= 1), "ERROR: is_prime() called on %s, which is not a positive integer" % n
     return (len(factors(n)) < 3)
 
 def lines_without_stanza_breaks(the_poem):
@@ -367,7 +367,7 @@ if __name__ == "__main__":
     chain_length = random.choice([3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 8, 8, 9, 10])
 
     # And add their names to the list of tags, plus track sources of this particular poem
-    source_texts = [ os.path.splitext(th.remove_prefix(os.path.basename(t), "Link to ").strip())[0] for t in sample_texts ]
+    source_texts = [ th.remove_prefix(os.path.basename(t), "Link to ").strip() for t in sample_texts ]
     the_tags = ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains'] + \
                ['Markov chain length: %d' % chain_length, '%d texts' % len(sample_texts) ]
 
