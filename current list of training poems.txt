@@ -126,6 +126,9 @@ Anne Sexton, "Woman With Girdle"
 Anne Sexton, "Young"
 Anne Waldman: "Battery"
 Annie Finch: "Love in the Morning"
+Anonymous: "Alison"
+Anonymous: "I Have a Yong Suster"
+Anonymous: "I Syng of a Mayden"
 Anonymous: "The Maiden’s Song"
 Anonymous: "Wulf and Eadwacer"
 Aphra Behn: "A Collection of the World's Most Romantic Poetry"
@@ -225,6 +228,18 @@ Edgar Allen Poe, "To Helen"
 Edgar Allen Poe, "To One in Paradise"
 Edgar Lee Masters: "My Light with Yours"
 Edmund Spenser, "One Day I Wrote Her Name"
+Edmund Spenser: The Shepheardes Calender: April
+Edmund Spenser: The Shepheardes Calender: August
+Edmund Spenser: The Shepheardes Calender: December
+Edmund Spenser: The Shepheardes Calender: February
+Edmund Spenser: The Shepheardes Calender: January
+Edmund Spenser: The Shepheardes Calender: July
+Edmund Spenser: The Shepheardes Calender: June
+Edmund Spenser: The Shepheardes Calender: March
+Edmund Spenser: The Shepheardes Calender: May
+Edmund Spenser: The Shepheardes Calender: November
+Edmund Spenser: The Shepheardes Calender: October
+Edmund Spenser: The Shepheardes Calender: September
 Edmund Waller: "Go, Lovely Rose"
 Edna St. Vincent Millay, "Alms"
 Edna St. Vincent Millay, "Ebb"
@@ -315,6 +330,7 @@ Gary Lenhart: "Footprint on Your Heart"
 Geffrey Davis: "King County Metro"
 Geffrey Davis: "The Epistemology of Rosemary"
 Geoffrey Chaucer: "The Love Unfeigned"
+Geoffrey Chaucer, "The Wife of Bath's Prologue and Tale"
 George Eliot: "Felix Holt, Radical"
 George Etherege, "Sylvia"
 George Gordon, Lord Byron, "She Walks in Beauty"
@@ -336,6 +352,7 @@ Helen Hay Whitney: "With Music"
 Helen Hoyt: "Action Poem"
 Henri Cole: "Gravity and Center"
 Henry Constable: "Song to Diaphenia"
+Henry Howard, "Love that Doth Reign and Live Within My Thought"
 Henry Howard: "Sonnet 8 [Set me where as the sun doth parch the green]"
 Henry Timrod, "I Thank You"
 Henry Wadsworth Longfellow: "Endymion"
@@ -539,7 +556,6 @@ Robert Frost: "To Earthward"
 Robert Frost: "Wind and Window Flower"
 Robert Hayden: "Those Winter Sundays"
 Robert Herrick: "A Sweet Disorder"
-Robert Herrick: "Famous Love and Romance Poetry"
 Robert Herrick: "Of Love: A Sonnet"
 Robert Herrick: "To Anthea, who may Command him Anything"
 Robert Herrick: "To Daffodils"
@@ -576,7 +592,132 @@ Shara McCallum: "Miss Sally on Love"
 Sidney Lanier, "A Song of Love"
 Sidney Lanier, "Evening Song"
 Sir Philip Sidney: "A Ditty"
+Sir Philip Sidney: Astrophel and Stella 001
+Sir Philip Sidney: Astrophel and Stella 002
+Sir Philip Sidney: Astrophel and Stella 003
+Sir Philip Sidney: Astrophel and Stella 004
+Sir Philip Sidney: Astrophel and Stella 005
+Sir Philip Sidney: Astrophel and Stella 006
+Sir Philip Sidney: Astrophel and Stella 007
+Sir Philip Sidney: Astrophel and Stella 008
+Sir Philip Sidney: Astrophel and Stella 009
+Sir Philip Sidney: Astrophel and Stella 010
+Sir Philip Sidney: Astrophel and Stella 011
+Sir Philip Sidney: Astrophel and Stella 012
+Sir Philip Sidney: Astrophel and Stella 013
+Sir Philip Sidney: Astrophel and Stella 014
+Sir Philip Sidney: Astrophel and Stella 015
+Sir Philip Sidney: Astrophel and Stella 016
+Sir Philip Sidney: Astrophel and Stella 017
+Sir Philip Sidney: Astrophel and Stella 018
+Sir Philip Sidney: Astrophel and Stella 019
+Sir Philip Sidney: Astrophel and Stella 020
+Sir Philip Sidney: Astrophel and Stella 021
+Sir Philip Sidney: Astrophel and Stella 022
+Sir Philip Sidney: Astrophel and Stella 023
+Sir Philip Sidney: Astrophel and Stella 024
+Sir Philip Sidney: Astrophel and Stella 025
+Sir Philip Sidney: Astrophel and Stella 026
+Sir Philip Sidney: Astrophel and Stella 027
+Sir Philip Sidney: Astrophel and Stella 028
+Sir Philip Sidney: Astrophel and Stella 029
+Sir Philip Sidney: Astrophel and Stella 030
+Sir Philip Sidney: Astrophel and Stella 031
+Sir Philip Sidney: Astrophel and Stella 032
+Sir Philip Sidney: Astrophel and Stella 033
+Sir Philip Sidney: Astrophel and Stella 034
+Sir Philip Sidney: Astrophel and Stella 035
+Sir Philip Sidney: Astrophel and Stella 036
+Sir Philip Sidney: Astrophel and Stella 037
+Sir Philip Sidney: Astrophel and Stella 038
+Sir Philip Sidney: Astrophel and Stella 039
+Sir Philip Sidney: Astrophel and Stella 040
+Sir Philip Sidney: Astrophel and Stella 041
+Sir Philip Sidney: Astrophel and Stella 042
+Sir Philip Sidney: Astrophel and Stella 043
+Sir Philip Sidney: Astrophel and Stella 044
+Sir Philip Sidney: Astrophel and Stella 045
+Sir Philip Sidney: Astrophel and Stella 046
+Sir Philip Sidney: Astrophel and Stella 047
+Sir Philip Sidney: Astrophel and Stella 048
+Sir Philip Sidney: Astrophel and Stella 049
+Sir Philip Sidney: Astrophel and Stella 050
+Sir Philip Sidney: Astrophel and Stella 051
+Sir Philip Sidney: Astrophel and Stella 052
+Sir Philip Sidney: Astrophel and Stella 053
+Sir Philip Sidney: Astrophel and Stella 054
+Sir Philip Sidney: Astrophel and Stella 055
+Sir Philip Sidney: Astrophel and Stella 056
+Sir Philip Sidney: Astrophel and Stella 057
+Sir Philip Sidney: Astrophel and Stella 058
+Sir Philip Sidney: Astrophel and Stella 059
+Sir Philip Sidney: Astrophel and Stella 060
+Sir Philip Sidney: Astrophel and Stella 061
+Sir Philip Sidney: Astrophel and Stella 062
+Sir Philip Sidney: Astrophel and Stella 063
+Sir Philip Sidney: Astrophel and Stella 064
+Sir Philip Sidney: Astrophel and Stella 065
+Sir Philip Sidney: Astrophel and Stella 066
+Sir Philip Sidney: Astrophel and Stella 067
+Sir Philip Sidney: Astrophel and Stella 068
+Sir Philip Sidney: Astrophel and Stella 069
+Sir Philip Sidney: Astrophel and Stella 070
+Sir Philip Sidney: Astrophel and Stella 071
+Sir Philip Sidney: Astrophel and Stella 072
+Sir Philip Sidney: Astrophel and Stella 073
+Sir Philip Sidney: Astrophel and Stella 074
+Sir Philip Sidney: Astrophel and Stella 075
+Sir Philip Sidney: Astrophel and Stella 076
+Sir Philip Sidney: Astrophel and Stella 077
+Sir Philip Sidney: Astrophel and Stella 078
+Sir Philip Sidney: Astrophel and Stella 079
+Sir Philip Sidney: Astrophel and Stella 080
+Sir Philip Sidney: Astrophel and Stella 081
+Sir Philip Sidney: Astrophel and Stella 082
+Sir Philip Sidney: Astrophel and Stella 083
+Sir Philip Sidney: Astrophel and Stella 084
+Sir Philip Sidney: Astrophel and Stella 085
+Sir Philip Sidney: Astrophel and Stella 086
+Sir Philip Sidney: Astrophel and Stella 087
+Sir Philip Sidney: Astrophel and Stella 088
+Sir Philip Sidney: Astrophel and Stella 089
+Sir Philip Sidney: Astrophel and Stella 090
+Sir Philip Sidney: Astrophel and Stella 091
+Sir Philip Sidney: Astrophel and Stella 092
+Sir Philip Sidney: Astrophel and Stella 093
+Sir Philip Sidney: Astrophel and Stella 094
+Sir Philip Sidney: Astrophel and Stella 095
+Sir Philip Sidney: Astrophel and Stella 096
+Sir Philip Sidney: Astrophel and Stella 097
+Sir Philip Sidney: Astrophel and Stella 098
+Sir Philip Sidney: Astrophel and Stella 099
+Sir Philip Sidney: Astrophel and Stella 100
+Sir Philip Sidney: Astrophel and Stella 101
+Sir Philip Sidney: Astrophel and Stella 102
+Sir Philip Sidney: Astrophel and Stella 103
+Sir Philip Sidney: Astrophel and Stella 104
+Sir Philip Sidney: Astrophel and Stella 105
+Sir Philip Sidney: Astrophel and Stella 106
+Sir Philip Sidney: Astrophel and Stella 107
+Sir Philip Sidney: Astrophel and Stella 108
+Sir Philip Sidney: Astrophel and Stella 109 (Grossart addition)
+Sir Philip Sidney: Astrophel and Stella 110 (Grossart addition)
+Sir Philip Sidney: Astrophel and Stella, Eighth Song
+Sir Philip Sidney: Astrophel and Stella, Fifth Song
+Sir Philip Sidney: Astrophel and Stella, First Song
+Sir Philip Sidney: Astrophel and Stella, Fourth Song
+Sir Philip Sidney: Astrophel and Stella, Ninth Song
+Sir Philip Sidney: Astrophel and Stella, Second Song
+Sir Philip Sidney: Astrophel and Stella, Seventh Song
+Sir Philip Sidney: Astrophel and Stella, Sixth Song
+Sir Philip Sidney: Astrophel and Stella, Tenth Song
+Sir Philip Sidney: Astrophel and Stella, Third Song
+Sir Philip Sidney: "Ye Goat-Herd Gods"
+Sir Thomas Wyatt: "And Wilt Thou Leave Me Thus?"
 Sir Thomas Wyatt: "Farewell Love and all thy Laws for ever"
+Sir Thomas Wyatt: "Forget Not Yet"
+Sir Thomas Wyatt: "Madam, Withouten Many Words"
+Sir Thomas Wyatt: "The Longë Love that in My Thought Doth Harbour"
 Sir Thomas Wyatt: "They Flee from Me"
 Sir Thomas Wyatt: "Whoso List to Hunt"
 Sir Walter Raleigh, "The Nymph's Reply to the Shepherd"
@@ -596,6 +737,7 @@ Sylvia Plath: "Mad Girl's Love Song"
 Sylvia Plath: "Mystic"
 Sylvia Plath, "Poppies In October"
 Theodore Roethke: "I Knew a Woman"
+The Pearl Poet, "Sir Gawain and the Green Knight"
 Thomas Ford, "There Is a Lady Sweet and Kind"
 Thomas Hardy, "A Broken Appointment"
 Thomas Hardy, "Neutral Tones"
