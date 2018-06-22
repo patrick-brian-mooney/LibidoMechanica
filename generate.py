@@ -48,6 +48,7 @@ def print_usage():    # Note that, currently, nothing calls this.
     log_it("INFO: print_usage() was called")
     print(__doc__)
 
+
 def count_previous_untitled_poems():
     return len([x for x in searcher.get_files_list(post_archives,None) if 'untitled' in x.lower()])
 
@@ -142,7 +143,7 @@ def curlify_quotes(the_poem, straight_quote, opening_quote, closing_quote):
     return the_poem
 
 def balance_punctuation(the_poem, opening_char, closing_char):
-    """Make sure that paired punctuation (smart quotes, parentheses, brackets) in the
+    """Makes sure that paired punctuation (smart quotes, parentheses, brackets) in the
     poem are 'balanced.' If not, it attempts to correct it.
     """
     opening, closing = the_poem.count(opening_char), the_poem.count(closing_char)
@@ -222,9 +223,9 @@ def fix_punctuation(the_poem):
     larger-scale structures.
 
     THE_POEM is a string, which is the text of the entire poem; the function
-    returns a new, cleaned-up version of the poem passed in.
+    returns a new, punctuation-fixed version of the poem passed in.
 
-    NOT YET FULLY IMPLEMENTED.
+    NOT YET FULLY IMPLEMENTED. What still needs to be done?
     """
     log_it("INFO: about to alter punctuation", 2)
     the_poem = strip_invalid_chars(the_poem)
@@ -245,6 +246,7 @@ def do_basic_cleaning(the_poem):
                                            ['\n"', '\n'], ['\n”', '\n'], ['\n\n\n', '\n\n'],
                                            ['\n" ', '\n"'], ['^" ', '"']]).strip()
     return the_poem
+
 
 def factors(n):
     """Return a list of the factors of a number. Based on code at
@@ -270,6 +272,7 @@ def lines_without_stanza_breaks(the_poem):
 def total_lines(the_poem):
     """Returns the total number of non-empty lines in the poem."""
     return len(lines_without_stanza_breaks(the_poem))
+
 
 def reduce_single_lines(the_poem):
     """Takes the poem passed as THE_POEM and goes through it, (mostly) eliminating
@@ -334,6 +337,7 @@ def regularize_form(the_poem):
     log_it("INFO: form normalization strategy is: %s" % normalization_strategy, 2)
     return normalization_procedure(the_poem)
 
+
 def do_final_cleaning(the_poem):
     log_it("INFO: about to do final cleaning of poem", 2)
     the_poem = th.multi_replace(the_poem, [[' \n', '\n'],               # Eliminate any spurious end-of-line spaces
@@ -345,9 +349,9 @@ def do_final_cleaning(the_poem):
                                           ])
     poem_lines = the_poem.split('\n')
     index = 0
-    while index < (len(poem_lines) - 1):                            # Go through, line by line, making any final changes.
+    while index < (len(poem_lines) - 1):                                # Go through, line by line, making any final changes.
         line = poem_lines[index]
-        if '  ' in line.strip():                                    # Multiple whitespace in line? Break into multiple lines
+        if '  ' in line.strip():                                        # Multiple whitespace in line? Break into multiple lines
             individual_lines = ['  ' + i + '\n' for i in line.split('  ')]
             if len(individual_lines) > 1:
                 poem_lines.pop(index)
@@ -363,7 +367,7 @@ def do_final_cleaning(the_poem):
 
 if __name__ == "__main__":
     # Set up the basic parameters for the run
-    sample_texts = random.sample([f for f in glob.glob(poetry_corpus + '/*') if not os.path.isdir(f)], random.randint(40,100))
+    sample_texts = random.sample([f for f in glob.glob(poetry_corpus + '/*') if not os.path.isdir(f)], random.randint(75, 200))
     chain_length = random.choice([3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 8, 8, 9, 10])
 
     # And add their names to the list of tags, plus track sources of this particular poem
