@@ -40,25 +40,44 @@ for which_url in sorted(url_list):
         soup = BeautifulSoup(page.content, 'html.parser')
 
         html_title = soup.find('title').decode()
+        cleaned_title = remove_tags(html_title).strip().strip('.').strip()
         try:
-            *_, poem_author, poem_title = [t.strip().strip('.').strip() for t in remove_tags(html_title).split(':')]
+            *_, poem_author, poem_title = [t.strip().strip('.').strip() for t in cleaned_title.split(':')]
         except ValueError:
-            poem_author, poem_title = [t.strip().strip('.').strip() for t in remove_tags(html_title).split(':')]
+            try:
+                poem_author, poem_title = [t.strip().strip('.').strip() for t in cleaned_title.split(':')]
+            except ValueError:
+                try:
+                    poem_author, poem_title = [t.strip().strip('.').strip() for t in cleaned_title.split('.')]
+                except ValueError:
+                    poem_author, *poem_title = [t.strip().strip('.').strip() for t in cleaned_title.split('.')]
+                    poem_title = '. '.join(poem_title)
         poem_filename = '%s/%s: "%s"' % (os.path.dirname(files_to_download), poem_author.strip(), poem_title.strip())
 
-        poem_with_cruft = soup.body.find_all('td')[1].table.tr.td.text
+        poem_with_cruft = soup.body.find_all('td')[1].prettify()
 
-        # OK, do any HTML preprocessing we need to do.      
+
+        # OK, do any HTML preprocessing we need to do.
         # Is any of the below even necessary? Aren't we getting plain text already from this site?
-        # Might as well run through basic cleanup in case there are inconsistencies in the format of the site.  
-        poem_with_cruft = th.multi_replace(poem_with_cruft, [['<br>', '\n'],
-                                                             ['<br />', '\n'],
-                                                             ['<br/>', '\n'],])
+        # Might as well run through basic cleanup in case there are inconsistencies in the format of the site.
+        poem_with_cruft = th.multi_replace(poem_with_cruft, [
+            ['<br/>', '<br>'], ['<br />', '<br>'],
+            [' <br>', '<br>'],
+            ['\n <font size="-1">\n', ''],
+            ['\n<br>\n', '\n'],
+            ['<br>', '\n'],
+            ['<br />', '\n'],
+            ['<br/>', '\n'],
+        ])
         poem_with_cruft = poem_with_cruft.replace('<div>', '<div>\n\n')
         poem_with_cruft = poem_with_cruft.replace('<p>', '<p>\n\n')
-        
+
         plain_text_poem = remove_tags(poem_with_cruft)
         plain_text_poem = html.unescape(plain_text_poem)
+        try:
+            assert len(plain_text_poem) > 15, "ERROR: We've stripped all the text out"
+        except AssertionError:
+            pass
         with open(poem_filename.strip(), mode="w") as poem_file:
             poem_file.write(plain_text_poem)
             print('done!')
