@@ -17,7 +17,7 @@ GPL, either version 3, or (at your option) any later version; see the file
 LICENSE.md for more details.
 """
 
-import bz2, datetime, functools, glob, json, os, pprint, random, re, string
+import bz2, datetime, functools, glob, json, os, pickle, pprint, random, re, string
 
 import patrick_logger                                   # From https://github.com/patrick-brian-mooney/personal-library
 from patrick_logger import log_it
@@ -36,14 +36,16 @@ patrick_logger.verbosity_level = 2
 
 poetry_corpus = '/LibidoMechanica/poetry_corpus'
 post_archives = '/LibidoMechanica/archives'
-similarity_cache = '/LibidoMechanica/similarity_cache'
-
+similarity_cache_location = '/LibidoMechanica/similarity_cache.pkl'
 
 known_punctuation = string.punctuation + "‘’“”"
+
 
 normalization_strategy, stanza_length = None, None
 
 the_tags = ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains']
+
+similarity_cache = None        # We'll reassign this soon enough. We want it to be defined in the global namespace, though.
 
 
 def print_usage():    # Note that, currently, nothing calls this.
@@ -393,6 +395,16 @@ def calculate_similarity(one, two, markov_length=5):
     chains_two = get_mappings(two, markov_length)
     return calculate_overlap(chains_one, chains_two) * calculate_overlap(chains_two, chains_one)
 
+def get_similarity(one, two):
+    """Checks to see if the similarity between ONE and TWO is already known. If it is,
+    returns that similarity. Otherwise, calculates the similarity and stores it in
+    the global similarity cache, which is written at the end of the script's run.
+
+    In short, this function memoizes calculate_similarity, taking advantage of the
+    fact that calculate_similarity(A, B) = calculate_similarity(B, A).
+    """
+    return calculate_similarity(one, two)           #FIXME: actually memoize
+
 
 oldmethod = False
 def get_source_texts():
@@ -416,7 +428,7 @@ def get_source_texts():
             current_choice = random.choice(available)
             available.remove(current_choice)
             for i in ret:
-                if random.random() < calculate_similarity(i, current_choice):
+                if random.random() < get_similarity(i, current_choice):
                     ret += [ current_choice ]
                     break
             if (1 - random.random() ** 2) < ((len(ret) - 75) / 200):
@@ -426,8 +438,35 @@ def get_source_texts():
         return ret
 
 
+# These next two functions manage the global cache of text similarities. There's a function that reads it into
+# memory to prepare for the run, and another function that writes the data to disk when the run is done. In between,
+# get_similarity() and its subsidiary functions may (usually WILL) modify the contents.
+def get_cache():
+    """Opens the existing cache and makes it available as a global variable, or else
+    returns an empty cache that will be modified and written out to disk after this
+    run.
+    """
+    try:
+        with open(similarity_cache_location, "rb") as cache_file:
+            ret = pickle.load(cache_file)
+    except (OSError, EOFError, pickle.PicklingError):
+        ret = dict()
+    return ret
+
+def flush_cache():
+    """Writes the textual similarity cache to disk and invalidates the global
+    reference to it. This should be done only after the similarity cache is no
+    longer needed, of course.
+    """
+    global similarity_cache
+    with open(similarity_cache_location, 'wb') as cache_file:
+        pickle.dump(similarity_cache, cache_file, protocol=-1)
+    del similarity_cache
+
+
 if __name__ == "__main__":
     # Set up the basic parameters for the run
+    similarity_cache = get_cache()
     sample_texts = get_source_texts()
     chain_length = random.choice([3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 8, 8, 8, 8, 9, 10])
 
@@ -482,5 +521,7 @@ if __name__ == "__main__":
     archive_name = "%s — %s.json.bz2" % (post_data['time'], the_title)
     with bz2.BZ2File(os.path.join(post_archives, archive_name), mode='wb') as archive_file:
         archive_file.write(json.dumps(post_data, sort_keys=True, indent=3, ensure_ascii=False).encode())
+
+    flush_cache()                   # Make sure any changes to calculated similarity data are saved.
 
     log_it("INFO: We're done")
