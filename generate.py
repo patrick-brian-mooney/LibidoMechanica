@@ -36,11 +36,14 @@ patrick_logger.verbosity_level = 2
 
 poetry_corpus = '/LibidoMechanica/poetry_corpus'
 post_archives = '/LibidoMechanica/archives'
+similarity_cache = '/LibidoMechanica/similarity_cache'
 
 
 known_punctuation = string.punctuation + "‘’“”"
 
 normalization_strategy, stanza_length = None, None
+
+the_tags = ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains']
 
 
 def print_usage():    # Note that, currently, nothing calls this.
@@ -259,7 +262,8 @@ def is_prime(n):
     """Return True if N is prime, false otherwise. "Prime" is here defined specifically
     as "has fewer than three factors," which is not quite the same as mathematical
     ... um, primery. Primeness. Anyway, this is intended to be inclusive about edge
-    cases that "is it prime?" should often include.
+    cases that "is it prime?" should often include. At least for the purposes of
+    this particular project.
     """
     assert (int(n) == n and n >= 1), "ERROR: is_prime() called on %s, which is not a positive integer" % n
     return (len(factors(n)) < 3)
@@ -346,6 +350,7 @@ def do_final_cleaning(the_poem):
                                            [' \n', '\n'], ['\n\?', '?'], ['\n!', '!'],
                                            ['\n"', '\n'], ['\n”', '\n'], ['\n’', '’'],
                                            ['“\n', '“'], ['"\n', '"'],  # And line breaks right after beginning punctuation
+                                           ['\n—\n', '—\n'],            # Don't allow an em dash to be the only character on a line.
                                           ])
     poem_lines = the_poem.split('\n')
     index = 0
@@ -365,15 +370,70 @@ def do_final_cleaning(the_poem):
     return regularize_form(the_poem)
 
 
+def get_mappings(f, markov_length):
+    """Trains a generator """
+    return pg.PoemGenerator(training_texts=[f], markov_length=markov_length).chains.the_mapping
+
+def calculate_overlap(one, two):
+    """return the percentage of chains in dictionary ONE that are also in
+    dictionary TWO."""
+    overlap_count = 0
+    for which_chain in one.keys():
+        if which_chain in two: overlap_count += 1
+    return overlap_count / len(one)
+
+def calculate_similarity(one, two, markov_length=5):
+    """Come up with a score evaluating how similar the two texts are to each other.
+    This actually means, more specifically, "the product of (a) the percentage of
+    chains in the set of chains of length MARKOV_LENGTH constructed from text ONE;
+    multiplied by (b) the percentage of chains of length MARKOV_LENGTH constructed
+    from text TWO.
+    """
+    chains_one = get_mappings(one, markov_length)
+    chains_two = get_mappings(two, markov_length)
+    return calculate_overlap(chains_one, chains_two) * calculate_overlap(chains_two, chains_one)
+
+
+oldmethod = False
+def get_source_texts():
+    """Return a list of partially random selected texts to serve as the source texts
+    for the poem we're writing. Currently, this particular segment of code and the
+    routines it depends on are very much a work in progress, and the primary reason
+    for the creation of this branch.
+
+    #FIXME: Some of this verbiage needs to come out before we merge back into master.
+    """
+    available = [f for f in glob.glob(poetry_corpus + '/*') if not os.path.isdir(f)]
+    if oldmethod:
+        return random.sample(available, random.randint(75, 200))
+    else:
+        ret = random.sample(available, 5)        # Seed the pot with five random source texts.
+        done, cycles = False, 0
+        while not done:
+            cycles += 1
+            if not available:
+                available = [f for f in glob.glob(poetry_corpus + '/*') if not os.path.isdir(f)]    # Refill the list of options if we've rejected them all.
+            current_choice = random.choice(available)
+            available.remove(current_choice)
+            for i in ret:
+                if random.random() < calculate_similarity(i, current_choice):
+                    ret += [ current_choice ]
+                    break
+            if (1 - random.random() ** 2) < ((len(ret) - 75) / 200):
+                done = True
+            if cycles > 10000 and len(ret) >= 75:
+                done = True
+        return ret
+
+
 if __name__ == "__main__":
     # Set up the basic parameters for the run
-    sample_texts = random.sample([f for f in glob.glob(poetry_corpus + '/*') if not os.path.isdir(f)], random.randint(75, 200))
-    chain_length = random.choice([3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 8, 8, 9, 10])
+    sample_texts = get_source_texts()
+    chain_length = random.choice([3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 8, 8, 8, 8, 9, 10])
 
     # And add their names to the list of tags, plus track sources of this particular poem
     source_texts = [ th.remove_prefix(os.path.basename(t), "Link to ").strip() for t in sample_texts ]
-    the_tags = ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains'] + \
-               ['Markov chain length: %d' % chain_length, '%d texts' % len(sample_texts) ]
+    the_tags += ['Markov chain length: %d' % chain_length, '%d texts' % len(sample_texts) ]
 
     poem_length = random.randint(4,20)              # in SENTENCES. Not lines.
 
