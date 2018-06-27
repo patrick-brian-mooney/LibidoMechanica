@@ -36,7 +36,7 @@ patrick_logger.verbosity_level = 2
 
 poetry_corpus = '/LibidoMechanica/poetry_corpus'
 post_archives = '/LibidoMechanica/archives'
-similarity_cache_location = '/LibidoMechanica/similarity_cache.pkl'
+similarity_cache_location = '/LibidoMechanica/similarity_cache.pkl.bz2'
 
 known_punctuation = string.punctuation + "‘’“”"
 
@@ -373,7 +373,7 @@ def do_final_cleaning(the_poem):
 
 
 def get_mappings(f, markov_length):
-    """Trains a generator """
+    """Trains a generator, then returns the calculated mappings."""
     return pg.PoemGenerator(training_texts=[f], markov_length=markov_length).chains.the_mapping
 
 def calculate_overlap(one, two):
@@ -390,19 +390,38 @@ def calculate_similarity(one, two, markov_length=5):
     chains in the set of chains of length MARKOV_LENGTH constructed from text ONE;
     multiplied by (b) the percentage of chains of length MARKOV_LENGTH constructed
     from text TWO.
+
+    This routine also caches the calculated result in the global variable
+    similarity_cache. It's a comparatively expensive calculation to make, so if
+    we're making it, we should store the current value.
     """
     chains_one = get_mappings(one, markov_length)
     chains_two = get_mappings(two, markov_length)
-    return calculate_overlap(chains_one, chains_two) * calculate_overlap(chains_two, chains_one)
+    ret = calculate_overlap(chains_one, chains_two) * calculate_overlap(chains_two, chains_one)
+    similarity_cache[tuple(sorted([one, two]))] = dict()
+    similarity_cache[tuple(sorted([one, two]))]['when'] = datetime.datetime.now()
+    similarity_cache[tuple(sorted([one, two]))]['similarity'] = ret
+    return ret
 
 def get_similarity(one, two):
     """Checks to see if the similarity between ONE and TWO is already known. If it is,
     returns that similarity. Otherwise, calculates the similarity and stores it in
     the global similarity cache, which is written at the end of the script's run.
 
-    In short, this function memoizes calculate_similarity, taking advantage of the
-    fact that calculate_similarity(A, B) = calculate_similarity(B, A).
+    In short, this function takes advantage of the memoization of
+    calculate_similarity, also taking taking advantage of the fact that
+    calculate_similarity(A, B) = calculate_similarity(B, A).
+
+    Note that calculate_similarity() itself stores the results of the function. This
+    function only takes advantage of the stored values.
     """
+    index = tuple(sorted([one, two]))               # Always index in lexicographical order
+    if index in similarity_cache:                   # If it's in the cache, and the data isn't stale ...
+        if similarity_cache[index]['when'] < datetime.datetime.fromtimestamp(os.path.getmtime(one)):
+            return calculate_similarity(one, two)
+        if similarity_cache[index]['when'] < datetime.datetime.fromtimestamp(os.path.getmtime(two)):
+            return calculate_similarity(one, two)
+        return similarity_cache[index]['similarity']
     return calculate_similarity(one, two)           #FIXME: actually memoize
 
 
@@ -415,6 +434,7 @@ def get_source_texts():
 
     #FIXME: Some of this verbiage needs to come out before we merge back into master.
     """
+    global the_tags
     available = [f for f in glob.glob(poetry_corpus + '/*') if not os.path.isdir(f)]
     if oldmethod:
         return random.sample(available, random.randint(75, 200))
@@ -431,27 +451,34 @@ def get_source_texts():
                 if random.random() < get_similarity(i, current_choice):
                     ret += [ current_choice ]
                     break
-            if (1 - random.random() ** 2) < ((len(ret) - 75) / 200):
+            if (1 - random.random() ** 2.5) < ((len(ret) - 75) / 200):
                 done = True
             if cycles > 10000 and len(ret) >= 75:
                 done = True
+        the_tags += ["text selection cycles: %d" % cycles]
         return ret
 
 
 # These next two functions manage the global cache of text similarities. There's a function that reads it into
 # memory to prepare for the run, and another function that writes the data to disk when the run is done. In between,
 # get_similarity() and its subsidiary functions may (usually WILL) modify the contents.
+
+# This cache is a dictionary:
+#     { (text_path_one, text_path_two):         (a tuple)
+#           { 'when':,                          (a datetime: when the calculation was made)
+#             'similarity':                     (a value between 0 and 1, heavily weighted toward zero)
+#               }
+#          }
 def get_cache():
     """Opens the existing cache and makes it available as a global variable, or else
     returns an empty cache that will be modified and written out to disk after this
     run.
     """
     try:
-        with open(similarity_cache_location, "rb") as cache_file:
-            ret = pickle.load(cache_file)
+        with bz2.open(similarity_cache_location, "rb") as cache_file:
+            return pickle.load(cache_file)
     except (OSError, EOFError, pickle.PicklingError):
-        ret = dict()
-    return ret
+        return dict()
 
 def flush_cache():
     """Writes the textual similarity cache to disk and invalidates the global
@@ -459,8 +486,8 @@ def flush_cache():
     longer needed, of course.
     """
     global similarity_cache
-    with open(similarity_cache_location, 'wb') as cache_file:
-        pickle.dump(similarity_cache, cache_file, protocol=-1)
+    with bz2.open(similarity_cache_location, 'wb') as cache_file:
+        pickle.dump(similarity_cache, cache_file, protocol=pickle.HIGHEST_PROTOCOL)
     del similarity_cache
 
 
