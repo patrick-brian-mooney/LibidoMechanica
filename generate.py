@@ -32,7 +32,7 @@ import poetry_generator as pg                           # https://github.com/pat
 import text_handling as th                              # From https://github.com/patrick-brian-mooney/personal-library
 
 
-patrick_logger.verbosity_level = 2
+patrick_logger.verbosity_level = 4
 
 poetry_corpus = '/LibidoMechanica/poetry_corpus'
 post_archives = '/LibidoMechanica/archives'
@@ -55,13 +55,15 @@ def print_usage():    # Note that, currently, nothing calls this.
 
 
 def count_previous_untitled_poems():
-    return len([x for x in searcher.get_files_list(post_archives,None) if 'untitled' in x.lower()])
+    ret = len([x for x in searcher.get_files_list(post_archives,None) if 'untitled' in x.lower()])
+    log_it("Counted previous untitled poems: %d" % ret, 4)
+    return ret
 
 def get_title(the_poem):
     """Get a title for the poem. There are several title-generating algorithms; this
     function picks one at random.
     """
-    log_it("INFO: getting a title for the poem")
+    log_it("INFO: getting a title for the poem", 2)
     possible_titles = [
       lambda: "Untitled Poem # %d" % (1 + count_previous_untitled_poems()),
       lambda: "Untitled Composition # %d" % (1 + count_previous_untitled_poems()),
@@ -85,11 +87,14 @@ def get_title(the_poem):
     while len(title) > 90:
         words = title.split()
         title = ' '.join(words[:random.randint(3, min(12, len(words)))])
+    title = title.strip()
     if title.startswith('‘') and not title.endswith('’'):       # The shortening procedure above might have stripped the closing quote
         title = title + '’'
     if '(‘' in title and not '’)' in title:
         title = title + '’)'
-    return fix_punctuation(title)
+    title = fix_punctuation(title)
+    log_it("Title is: %s" % title)
+    return title
 
 
 def strip_invalid_chars(the_poem):
@@ -99,7 +104,7 @@ def strip_invalid_chars(the_poem):
     takes an entire poem as input (THE_POEM) and returns a poem entirely
     stripped of all such characters.
     """
-    log_it("INFO: stripping invalid characters from the poem")
+    log_it("INFO: stripping invalid characters from the poem", 2)
     invalids = ['_', '*']
     return ''.join([s for s in the_poem if not s in invalids])
 
@@ -155,7 +160,7 @@ def balance_punctuation(the_poem, opening_char, closing_char):
     if closing_char == '’':     # Sigh. We have to worry about apostrophes that look like closing single quotes.
         closing -= len(re.findall('[:alnum:]*’[:alnum:]', the_poem))    # Inside a word? It's an apostrophe. Don't count it
 
-    log_it("INFO: Balancing %s and %s (%d/%d)" % (opening_char, closing_char, opening, closing))
+    log_it("INFO: Balancing %s and %s (%d/%d)" % (opening_char, closing_char, opening, closing), 2)
 
     if opening or closing:      # Do nothing if there's no instances of either character
         if opening != closing:  # Do nothing if we already have equal numbers (even if not properly "balanced")
@@ -216,7 +221,7 @@ def balance_punctuation(the_poem, opening_char, closing_char):
                 else:
                     index += 1
             the_poem = ''.join(indexed_poem)
-    log_it("   ... after balancing, there are %d/%d punctuation marks." % (the_poem.count(opening_char), the_poem.count(closing_char)), 2)
+    log_it("   ... after balancing, there are %d/%d punctuation marks." % (the_poem.count(opening_char), the_poem.count(closing_char)), 3)
     return the_poem
 
 def fix_punctuation(the_poem):
@@ -271,8 +276,7 @@ def is_prime(n):
     return (len(factors(n)) < 3)
 
 def lines_without_stanza_breaks(the_poem):
-    """Returns a *list* of lines from THE_POEM, removing any stanza breaks.
-    """
+    """Returns a *list* of lines from THE_POEM, removing any stanza breaks."""
     return [l for l in the_poem.split('\n') if len(l.strip()) > 0]
 
 def total_lines(the_poem):
@@ -283,8 +287,6 @@ def total_lines(the_poem):
 def reduce_single_lines(the_poem):
     """Takes the poem passed as THE_POEM and goes through it, (mostly) eliminating
     single-line stanzas. Returns the corrected poem.
-
-    #FIXME: does not yet do anything productive.
     """
     stanzas = [l.split('\n') for l in the_poem.split('\n\n')]   # A list of stanzas, each of which is a list of lines
     i = 0
@@ -374,6 +376,7 @@ def do_final_cleaning(the_poem):
 
 def get_mappings(f, markov_length):
     """Trains a generator, then returns the calculated mappings."""
+    log_it("get_mappings() called for file %s" % f, 5)
     return pg.PoemGenerator(training_texts=[f], markov_length=markov_length).chains.the_mapping
 
 def calculate_overlap(one, two):
@@ -395,6 +398,7 @@ def calculate_similarity(one, two, markov_length=5):
     similarity_cache. It's a comparatively expensive calculation to make, so if
     we're making it, we should store the current value.
     """
+    log_it("calculate_similarity() called for: %s" % [one, two], 5)
     chains_one = get_mappings(one, markov_length)
     chains_two = get_mappings(two, markov_length)
     ret = calculate_overlap(chains_one, chains_two) * calculate_overlap(chains_two, chains_one)
@@ -416,27 +420,30 @@ def get_similarity(one, two):
     function only takes advantage of the stored values.
     """
     index = tuple(sorted([one, two]))               # Always index in lexicographical order
+    log_it("get_similarity() called for files: %s" % list(index), 5)
     if index in similarity_cache:                   # If it's in the cache, and the data isn't stale ...
         if similarity_cache[index]['when'] < datetime.datetime.fromtimestamp(os.path.getmtime(one)):
+            log_it("  ... but cached data is stale relative to %s !" % one, 6)
             return calculate_similarity(one, two)
         if similarity_cache[index]['when'] < datetime.datetime.fromtimestamp(os.path.getmtime(two)):
+            log_it("  ... but cached data is stale relative to %s !" % two, 6)
             return calculate_similarity(one, two)
+        log_it(" ... returning cached value!", 6)
         return similarity_cache[index]['similarity']
-    return calculate_similarity(one, two)           #FIXME: actually memoize
+    log_it(" ... not found in cache! Calculating and cacheing ...", 6)
+    return calculate_similarity(one, two)
 
 
 oldmethod = False
 def get_source_texts():
     """Return a list of partially random selected texts to serve as the source texts
-    for the poem we're writing. Currently, this particular segment of code and the
-    routines it depends on are very much a work in progress, and the primary reason
-    for the creation of this branch.
-
-    #FIXME: Some of this verbiage needs to come out before we merge back into master.
+    for the poem we're writing. The current method for 
     """
     global the_tags
+    log_it("Choosing source texts")
     available = [f for f in glob.glob(poetry_corpus + '/*') if not os.path.isdir(f)]
     if oldmethod:
+        log_it(" ... according to the old (pure random choice) method")
         return random.sample(available, random.randint(75, 200))
     else:
         ret = random.sample(available, 5)        # Seed the pot with five random source texts.
@@ -447,15 +454,23 @@ def get_source_texts():
                 available = [f for f in glob.glob(poetry_corpus + '/*') if not os.path.isdir(f)]    # Refill the list of options if we've rejected them all.
             current_choice = random.choice(available)
             available.remove(current_choice)
+            changed = False
             for i in ret:
                 if random.random() < get_similarity(i, current_choice):
                     ret += [ current_choice ]
+                    changed = True
                     break
-            if (1 - random.random() ** 2.5) < ((len(ret) - 75) / 200):
-                done = True
+            if changed:
+                if (1 - random.random() ** 2.5) < ((len(ret) - 75) / 200):
+                    done = True
             if cycles > 10000 and len(ret) >= 75:
                 done = True
+            if cycles % 5 == 0:
+                log_it("    ... %d selection cycles" % cycles, 4)
+            if cycles % 25 == 0:
+                log_it("  ... %d selected texts in %d cycles" % (len(ret), cycles), 3)
         the_tags += ["text selection cycles: %d" % cycles]
+        log_it("  ... selected %d texts" % len(ret), 2)
         return ret
 
 
@@ -495,6 +510,8 @@ if __name__ == "__main__":
     # Set up the basic parameters for the run
     similarity_cache = get_cache()
     sample_texts = get_source_texts()
+    flush_cache()                   # Make sure any changes to calculated similarity data are saved.
+
     chain_length = random.choice([3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 8, 8, 8, 8, 9, 10])
 
     # And add their names to the list of tags, plus track sources of this particular poem
@@ -548,7 +565,5 @@ if __name__ == "__main__":
     archive_name = "%s — %s.json.bz2" % (post_data['time'], the_title)
     with bz2.BZ2File(os.path.join(post_archives, archive_name), mode='wb') as archive_file:
         archive_file.write(json.dumps(post_data, sort_keys=True, indent=3, ensure_ascii=False).encode())
-
-    flush_cache()                   # Make sure any changes to calculated similarity data are saved.
 
     log_it("INFO: We're done")
