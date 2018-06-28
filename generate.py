@@ -32,7 +32,7 @@ import poetry_generator as pg                           # https://github.com/pat
 import text_handling as th                              # From https://github.com/patrick-brian-mooney/personal-library
 
 
-patrick_logger.verbosity_level = 4
+patrick_logger.verbosity_level = 2
 
 poetry_corpus = '/LibidoMechanica/poetry_corpus'
 post_archives = '/LibidoMechanica/archives'
@@ -437,7 +437,7 @@ def get_similarity(one, two):
 oldmethod = False
 def get_source_texts():
     """Return a list of partially random selected texts to serve as the source texts
-    for the poem we're writing. The current method for 
+    for the poem we're writing. The current method for
     """
     global the_tags
     log_it("Choosing source texts")
@@ -446,22 +446,22 @@ def get_source_texts():
         log_it(" ... according to the old (pure random choice) method")
         return random.sample(available, random.randint(75, 200))
     else:
-        ret = random.sample(available, 5)        # Seed the pot with five random source texts.
+        ret = random.sample(available, random.randint(3, 10))   # Seed the pot with several random source texts.
         done, cycles = False, 0
         while not done:
             cycles += 1
             if not available:
-                available = [f for f in glob.glob(poetry_corpus + '/*') if not os.path.isdir(f)]    # Refill the list of options if we've rejected them all.
+                available = [f for f in glob.glob(poetry_corpus + '/*') if not os.path.isdir(f) and f not in ret]    # Refill the list of options if we've rejected them all.
             current_choice = random.choice(available)
             available.remove(current_choice)
             changed = False
             for i in ret:
-                if random.random() < get_similarity(i, current_choice):
+                if random.random() < (get_similarity(i, current_choice) / (len(ret)/3)):
                     ret += [ current_choice ]
                     changed = True
                     break
             if changed:
-                if (1 - random.random() ** 2.5) < ((len(ret) - 75) / 200):
+                if (1 - random.random() ** 2.8) < ((len(ret) - 75) / 200):
                     done = True
             if cycles > 10000 and len(ret) >= 75:
                 done = True
@@ -489,6 +489,7 @@ def get_cache():
     returns an empty cache that will be modified and written out to disk after this
     run.
     """
+    global similarity_cache
     try:
         with bz2.open(similarity_cache_location, "rb") as cache_file:
             return pickle.load(cache_file)
@@ -499,10 +500,29 @@ def flush_cache():
     """Writes the textual similarity cache to disk and invalidates the global
     reference to it. This should be done only after the similarity cache is no
     longer needed, of course.
+
+    Or, rather, that's the basic idea. In fact, what it does it reload the version
+    of the cache that's currently on disk and updates it with new info instead of
+    replacing the one on disk. The reason for this, of course, is that this
+    script has become complex enough that it may take more than an hour to run on
+    the slow old laptop that hosts it ... and so there may be multiple copies
+    running, each of which thinks it has the "master copy" in memory. To help
+    amelioriate the potential for race conditions, we update instead of overwriting.
+    #FIXME: That's not a perfect solution: We should be locking or at least using
+    exclusive-opening on the cache in addition to updating the cache itself, but
+    it's probably good enough most of the time. Anyway, this is a cache: worst case
+    scenario is that we delete it manually and no longer have memoization data for
+    the comparatively slow calculations. Oh well, it'll be recalculated.
     """
     global similarity_cache
+    try:
+        with bz2.open(similarity_cache_location, "rb") as cache_file:
+            old = pickle.load(cache_file)
+    except (OSError, EOFError, pickle.PicklingError):
+        old = dict()
+    old.update(similarity_cache)
     with bz2.open(similarity_cache_location, 'wb') as cache_file:
-        pickle.dump(similarity_cache, cache_file, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(old, cache_file, protocol=pickle.HIGHEST_PROTOCOL)
     del similarity_cache
 
 
@@ -512,13 +532,13 @@ if __name__ == "__main__":
     sample_texts = get_source_texts()
     flush_cache()                   # Make sure any changes to calculated similarity data are saved.
 
-    chain_length = random.choice([3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 8, 8, 8, 8, 9, 10])
+    chain_length = round(min(max(random.normalvariate(7, 3), 3), 10))
 
     # And add their names to the list of tags, plus track sources of this particular poem
     source_texts = [ th.remove_prefix(os.path.basename(t), "Link to ").strip() for t in sample_texts ]
     the_tags += ['Markov chain length: %d' % chain_length, '%d texts' % len(sample_texts) ]
 
-    poem_length = random.randint(4,20)              # in SENTENCES. Not lines.
+    poem_length = round(min(max(random.normalvariate(10, 5), 4), 200))          # in SENTENCES. Not lines.
 
     log_it("INFO: about to set up and train text generator ...")
     genny = pg.PoemGenerator(name='Libido Mechanica generator', training_texts=sample_texts, markov_length=chain_length)
