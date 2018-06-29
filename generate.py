@@ -32,7 +32,7 @@ import poetry_generator as pg                           # https://github.com/pat
 import text_handling as th                              # From https://github.com/patrick-brian-mooney/personal-library
 
 
-patrick_logger.verbosity_level = 2
+patrick_logger.verbosity_level = 3
 
 poetry_corpus = '/LibidoMechanica/poetry_corpus'
 post_archives = '/LibidoMechanica/archives'
@@ -434,7 +434,7 @@ def get_similarity(one, two):
     return calculate_similarity(one, two)
 
 
-oldmethod = False
+oldmethod = False               # Set to True when tweaking the newer method to use the old method as a fallback.
 def get_source_texts():
     """Return a list of partially random selected texts to serve as the source texts
     for the poem we're writing. The current method for
@@ -447,29 +447,29 @@ def get_source_texts():
         return random.sample(available, random.randint(75, 200))
     else:
         ret = random.sample(available, random.randint(3, 10))   # Seed the pot with several random source texts.
-        done, cycles = False, 0
+        done, candidates = False, 0
         while not done:
-            cycles += 1
+            candidates += 1
             if not available:
                 available = [f for f in glob.glob(poetry_corpus + '/*') if not os.path.isdir(f) and f not in ret]    # Refill the list of options if we've rejected them all.
             current_choice = random.choice(available)
             available.remove(current_choice)
             changed = False
             for i in ret:
-                if random.random() < (get_similarity(i, current_choice) / (len(ret)/3)):
+                if random.random() < (get_similarity(i, current_choice) / (len(ret)/2)):
                     ret += [ current_choice ]
                     changed = True
                     break
             if changed:
-                if (1 - random.random() ** 2.8) < ((len(ret) - 75) / 200):
+                if (1 - random.random() ** 3.5) < ((len(ret) - 75) / 200):
                     done = True
-            if cycles > 10000 and len(ret) >= 75:
+            if candidates > 10000 and len(ret) >= 75:
                 done = True
-            if cycles % 5 == 0:
-                log_it("    ... %d selection cycles" % cycles, 4)
-            if cycles % 25 == 0:
-                log_it("  ... %d selected texts in %d cycles" % (len(ret), cycles), 3)
-        the_tags += ["text selection cycles: %d" % cycles]
+            if candidates % 5 == 0:
+                log_it("    ... %d selection candidates" % candidates, 4)
+            if candidates % 25 == 0:
+                log_it("  ... %d selected texts in %d candidates" % (len(ret), candidates), 3)
+        the_tags += ["rejected training texts: %d" % (candidates - len(ret))]
         log_it("  ... selected %d texts" % len(ret), 2)
         return ret
 
@@ -513,6 +513,9 @@ def flush_cache():
     it's probably good enough most of the time. Anyway, this is a cache: worst case
     scenario is that we delete it manually and no longer have memoization data for
     the comparatively slow calculations. Oh well, it'll be recalculated.
+
+    In fact, we should be using some sort of real database-like thing, because the
+    overhead of keeping all this data in memory could in theory grow quite large.
     """
     global similarity_cache
     try:
