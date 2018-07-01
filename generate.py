@@ -32,7 +32,7 @@ import poetry_generator as pg                           # https://github.com/pat
 import text_handling as th                              # From https://github.com/patrick-brian-mooney/personal-library
 
 
-patrick_logger.verbosity_level = 3
+patrick_logger.verbosity_level = 1
 
 poetry_corpus = '/LibidoMechanica/poetry_corpus'
 post_archives = '/LibidoMechanica/archives'
@@ -125,9 +125,9 @@ def curlify_quotes(the_poem, straight_quote, opening_quote, closing_quote):
     NOT FULLY TESTED, but I'm going to bed.
     """
     log_it("INFO: curlify_quotes() called to differentiate %s (%d) into %s and %s" % (straight_quote, the_poem.count(straight_quote), opening_quote, closing_quote), 2)
-    assert len(straight_quote) == 1, "Quote characters passed to curify_quotes() must be one-character strings"
-    assert len(opening_quote) == 1, "Quote characters passed to curify_quotes() must be one-character strings"
-    assert len(closing_quote) == 1, "Quote characters passed to curify_quotes() must be one-character strings"
+    assert len(straight_quote) == 1, "Quote characters passed to curlify_quotes() must be one-character strings"
+    assert len(opening_quote) == 1, "Quote characters passed to curlify_quotes() must be one-character strings"
+    assert len(closing_quote) == 1, "Quote characters passed to curlify_quotes() must be one-character strings"
     index = 0
     while index < len(the_poem):
         index = the_poem.find(straight_quote, index)
@@ -194,7 +194,7 @@ def balance_punctuation(the_poem, opening_char, closing_char):
                             index += 1                      # Move on to next character
                 elif nesting_level > 0:             # Are we currently in the middle of a bracketed block?
                     if next_char.isspace():             # Is the next character whitespace?
-                        if random.random() < (0.001 * nesting_level):   # Low chance of closing the open bracketer
+                        if random.random() < (0.001 * nesting_level):   # Low chance of closing the open bracket
                             indexed_poem.insert(index, closing_char)
                             nesting_level -= 1
                     elif char in ['.', '?', '!'] and next_char.isspace():
@@ -269,8 +269,8 @@ def is_prime(n):
     """Return True if N is prime, false otherwise. "Prime" is here defined specifically
     as "has fewer than three factors," which is not quite the same as mathematical
     ... um, primery. Primeness. Anyway, this is intended to be inclusive about edge
-    cases that "is it prime?" should often include. At least for the purposes of
-    this particular project.
+    cases that "is it prime?" should often include (at least for the purposes of
+    this particular project) rather than be an exact mathematically correct test.
     """
     assert (int(n) == n and n >= 1), "ERROR: is_prime() called on %s, which is not a positive integer" % n
     return (len(factors(n)) < 3)
@@ -284,21 +284,22 @@ def total_lines(the_poem):
     return len(lines_without_stanza_breaks(the_poem))
 
 
-def reduce_single_lines(the_poem):
-    """Takes the poem passed as THE_POEM and goes through it, (mostly) eliminating
-    single-line stanzas. Returns the corrected poem.
+def remove_single_lines(the_poem, combination_probability=0.85):
+    """Takes the poem passed as THE_POEM and goes through it, (randomly) eliminating
+    single-line stanzas. Returns the modified poem.
     """
     stanzas = [l.split('\n') for l in the_poem.split('\n\n')]   # A list of stanzas, each of which is a list of lines
     i = 0
     while i < len(stanzas):
         if len(stanzas[i]) < 3:
             try:                                # Combine it with the next stanza. Probably.
-                if random.random() <= 0.85:
+                if random.random() <= combination_probability:
                     next_stanza = stanzas.pop(i+1)
                     stanzas[i] += next_stanza
                 else: i += 1
-            except IndexError:                  # If there is no next stanza, oh well.
-                pass
+            except IndexError:                  # If there is no next stanza ...
+                if len(stanzas) > 1:            # ... add this stanza to the end of the previous stanza.
+                    stanzas[-2] += stanzas.pop()
         else:
             i += 1
     return '\n\n'.join(['\n'.join(s) for s in stanzas])
@@ -333,13 +334,17 @@ def regularize_form(the_poem):
     """
     global normalization_strategy
     possible_strategies = [
-        ('regular stanza length (experimental)', lambda x: regularize_stanza_length(x)),
-        ('regular stanza length (experimental)', lambda x: regularize_stanza_length(x)),
-        ('regular stanza length (experimental)', lambda x: regularize_stanza_length(x)),
-        ('regular stanza length (experimental)', lambda x: regularize_stanza_length(x)),
+        ('regular stanza length', lambda x: regularize_stanza_length(x)),
+        ('regular stanza length', lambda x: regularize_stanza_length(x)),
+        ('regular stanza length', lambda x: regularize_stanza_length(x)),
+        ('regular stanza length', lambda x: regularize_stanza_length(x)),
         (None, lambda x: x),
-        ('reduce single lines (experimental)', lambda x: reduce_single_lines(x)),
-        ('reduce single lines (experimental)', lambda x: reduce_single_lines(x)),
+        ('remove single lines (strict)', lambda x: remove_single_lines(x, combination_probability=1)),
+        ('remove single lines (strict)', lambda x: remove_single_lines(x, combination_probability=1)),
+        ('remove single lines (strict)', lambda x: remove_single_lines(x, combination_probability=1)),
+        ('remove single lines (lax)', lambda x: remove_single_lines(x, combination_probability=0.8)),
+        ('remove single lines (lax)', lambda x: remove_single_lines(x, combination_probability=0.8)),
+
     ]
     normalization_strategy, normalization_procedure = random.choice(possible_strategies)
     log_it("INFO: form normalization strategy is: %s" % normalization_strategy, 2)
@@ -351,7 +356,7 @@ def do_final_cleaning(the_poem):
     the_poem = th.multi_replace(the_poem, [[' \n', '\n'],               # Eliminate any spurious end-of-line spaces
                                            ['\n\n\n', '\n\n'],          # ... and any extra line breaks.
                                            [r'\n\)', r')'],             # And line breaks right before ending punctuation
-                                           [' \n', '\n'], ['\n\?', '?'], ['\n!', '!'],
+                                           ['\n\?', '?'], ['\n!', '!'],
                                            ['\n"', '\n'], ['\n”', '\n'], ['\n’', '’'],
                                            ['“\n', '“'], ['"\n', '"'],  # And line breaks right after beginning punctuation
                                            ['\n—\n', '—\n'],            # Don't allow an em dash to be the only character on a line.
@@ -402,9 +407,7 @@ def calculate_similarity(one, two, markov_length=5):
     chains_one = get_mappings(one, markov_length)
     chains_two = get_mappings(two, markov_length)
     ret = calculate_overlap(chains_one, chains_two) * calculate_overlap(chains_two, chains_one)
-    similarity_cache[tuple(sorted([one, two]))] = dict()
-    similarity_cache[tuple(sorted([one, two]))]['when'] = datetime.datetime.now()
-    similarity_cache[tuple(sorted([one, two]))]['similarity'] = ret
+    similarity_cache[tuple(sorted([one, two]))] = {'when': datetime.datetime.now(), 'similarity': ret}
     return ret
 
 def get_similarity(one, two):
@@ -447,6 +450,7 @@ def get_source_texts():
         return random.sample(available, random.randint(75, 200))
     else:
         ret = random.sample(available, random.randint(3, 10))   # Seed the pot with several random source texts.
+        for i in ret: ret.remove(i)                                 # Make sure already-chosen texts are not eligible to be chosen again.
         done, candidates = False, 0
         while not done:
             candidates += 1
@@ -456,12 +460,12 @@ def get_source_texts():
             available.remove(current_choice)
             changed = False
             for i in ret:
-                if random.random() < (get_similarity(i, current_choice) / (len(ret)/2)):
+                if random.random() < (get_similarity(i, current_choice) / len(ret)):
                     ret += [ current_choice ]
                     changed = True
                     break
             if changed:
-                if (1 - random.random() ** 3.5) < ((len(ret) - 75) / 200):
+                if (1 - random.random() ** 5) < ((len(ret) - 150) / 200):
                     done = True
             if candidates > 10000 and len(ret) >= 75:
                 done = True
@@ -492,6 +496,7 @@ def get_cache():
     global similarity_cache
     try:
         with bz2.open(similarity_cache_location, "rb") as cache_file:
+            log_it("Loading cached similarity data ...", 3)
             return pickle.load(cache_file)
     except (OSError, EOFError, pickle.PicklingError):
         return dict()
@@ -518,6 +523,8 @@ def flush_cache():
     overhead of keeping all this data in memory could in theory grow quite large.
     """
     global similarity_cache
+    log_it("Updating similarity data cache on disk ...", 3)
+
     try:
         with bz2.open(similarity_cache_location, "rb") as cache_file:
             old = pickle.load(cache_file)
@@ -527,13 +534,16 @@ def flush_cache():
     with bz2.open(similarity_cache_location, 'wb') as cache_file:
         pickle.dump(old, cache_file, protocol=pickle.HIGHEST_PROTOCOL)
     del similarity_cache
+    log_it("... updated!", 3)
 
 
 if __name__ == "__main__":
     # Set up the basic parameters for the run
-    similarity_cache = get_cache()
-    sample_texts = get_source_texts()
-    flush_cache()                   # Make sure any changes to calculated similarity data are saved.
+    try:
+        similarity_cache = get_cache()
+        sample_texts = get_source_texts()
+    finally:
+        flush_cache()                       # Make sure any changes to calculated similarity data are saved.
 
     chain_length = round(min(max(random.normalvariate(7, 3), 3), 10))
 
@@ -573,7 +583,6 @@ if __name__ == "__main__":
     formatted_poem = th.multi_replace(formatted_poem, [['<p>\n', '\n<p>']])
     # Prevent all spaces from collapsing; get rid of spurious paragraphs
     formatted_poem = th.multi_replace(formatted_poem, [['<p></p>', ''], ['<p>\n</p>', '']])
-    # formatted_poem = "<pre>\n%s\n</pre>" % formatted_poem         # OK, that looks really ugly when it posts.
 
     log_it('INFO: Attempting to post the content...')
     the_status, the_tumblr_data = social_media.tumblr_text_post(libidomechanica_client, ', '.join(the_tags), the_title, formatted_poem)
