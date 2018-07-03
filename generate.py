@@ -100,7 +100,8 @@ normalization_strategy, stanza_length = None, None
 
 the_tags = ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains']
 
-similarity_cache = None        # We'll reassign this soon enough. We want it to be defined in the global namespace, though.
+similarity_cache = None     # We'll reassign this soon enough. We want it to be defined in the global namespace, though.
+genny = None                # Again: we'll reassign this soon.
 
 
 def print_usage():    # Note that, currently, nothing calls this.
@@ -647,7 +648,7 @@ if force_debug:  # Force-run minor cleaning tasks from an IDE here.
 
 
 def main():
-    global similarity_cache, the_tags
+    global similarity_cache, the_tags, genny
     # First, read the similarity cache into memory
     try:
         similarity_cache = get_cache()
@@ -669,16 +670,16 @@ def main():
     log_it("...trained!")
 
     log_it("INFO: about to generate poem ...")
-    the_poem = genny.gen_text(sentences_desired=poem_length, paragraph_break_probability=0.2)
+    raw_poem = genny.gen_text(sentences_desired=poem_length, paragraph_break_probability=0.2)
 
-    the_title = get_title(the_poem)
+    the_title = get_title(raw_poem)
 
     log_it("poem generated; title is: %s" % the_title)
-    log_it("lines are: \n\n" + the_poem)
+    log_it("lines are: \n\n" + raw_poem)
     log_it("tags are: %s" % the_tags)
 
     log_it("INFO: cleaning poem up ...")
-    the_poem = do_basic_cleaning(the_poem)
+    the_poem = do_basic_cleaning(raw_poem)
     the_poem = fix_punctuation(the_poem)
     the_poem = do_final_cleaning(the_poem)
 
@@ -703,7 +704,8 @@ def main():
 
     log_it("INFO: archiving poem and metadata ...")
     post_data = {'title': the_title, 'text': the_poem, 'time': datetime.datetime.now().isoformat() }
-    post_data['formatted_text'], post_data['tags'], post_data['sources'] = formatted_poem, the_tags, sorted(source_texts)
+    post_data['raw_poem'], post_data['formatted_text'] = raw_poem, formatted_poem
+    post_data['tags'], post_data['sources'] = the_tags, sorted(source_texts)
     post_data['status_code'], post_data['tumblr_data'] = the_status, the_tumblr_data
     post_data['normalization strategy'], post_data['stanza length'] = normalization_strategy, stanza_length
     archive_name = "%s — %s.json.bz2" % (post_data['time'], the_title)
