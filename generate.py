@@ -91,7 +91,7 @@ patrick_logger.verbosity_level = 3
 home_dir = '/LibidoMechanica'
 poetry_corpus = os.path.join(home_dir, 'poetry_corpus')
 post_archives = os.path.join(home_dir, 'archives')
-similarity_cache_location = '/LibidoMechanica/similarity_cache.pkl.bz2'
+similarity_cache_location = os.path.join(home_dir, 'similarity_cache.pkl.bz2')
 
 known_punctuation = string.punctuation + "‘’“”"
 
@@ -100,8 +100,7 @@ normalization_strategy, stanza_length = None, None
 
 the_tags = ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains']
 
-similarity_cache = None     # We'll reassign this soon enough. We want it to be defined in the global namespace, though.
-genny = None                # Again: we'll reassign this soon.
+genny = None                # We'll reassign this soon enough. We want it to be defined in the global namespace, though.
 
 
 def print_usage():    # Note that, currently, nothing calls this.
@@ -440,60 +439,183 @@ def get_mappings(f, markov_length):
     log_it("get_mappings() called for file %s" % f, 5)
     return pg.PoemGenerator(training_texts=[f], markov_length=markov_length).chains.the_mapping
 
-def calculate_overlap(one, two):
-    """return the percentage of chains in dictionary ONE that are also in
-    dictionary TWO."""
-    overlap_count = 0
-    for which_chain in one.keys():
-        if which_chain in two: overlap_count += 1
-    return overlap_count / len(one)
 
-def calculate_similarity(one, two, markov_length=5):
-    """Come up with a score evaluating how similar the two texts are to each other.
-    This actually means, more specifically, "the product of (a) the percentage of
-    chains in the set of chains of length MARKOV_LENGTH constructed from text ONE;
-    multiplied by (b) the percentage of chains of length MARKOV_LENGTH constructed
-    from text TWO.
+class SimilarityCache(object):
+    """This class is an object that manages the global cache of text similarities.
 
-    This routine also caches the calculated result in the global variable
-    similarity_cache. It's a comparatively expensive calculation to make, so if
-    we're making it, we should store the current value.
+    The object's internal data cache is a dictionary:
+        { (text_path_one, text_path_two):         (a tuple)
+              { 'when':,                          (a datetime: when the calculation was made)
+                'similarity':                     (a value between 0 and 1, rather heavily weighted toward zero)
+                  }
+             }
     """
-    log_it("calculate_similarity() called for: %s" % [one, two], 5)
-    chains_one = get_mappings(one, markov_length)
-    chains_two = get_mappings(two, markov_length)
-    ret = calculate_overlap(chains_one, chains_two) * calculate_overlap(chains_two, chains_one)
-    similarity_cache[tuple(sorted([one, two]))] = {'when': datetime.datetime.now(), 'similarity': ret}
-    return ret
+    def __init__(self, cache_file=similarity_cache_location):
+        """Loads the existing cache into memory, if possible, or else returns an empty
+        cache that will be modified and written out to disk after this run.
+        """
+        self.cache_file = cache_file
+        self.dirty = False
+        try:
+            with bz2.open(similarity_cache_location, "rb") as cache_file:
+                log_it("Loading cached similarity data ...", 3)
+                self.data = pickle.load(cache_file)
+        except (OSError, EOFError, pickle.PicklingError):
+            self.data = dict()
+            
+    def __del__(self):
+        self.flush_cache()
+    
+    def flush_cache(self):
+        """Writes the textual similarity cache to disk, if self.dirty is True. If
+        self.dirty is False, it returns without doing anything.
+    
+        Or, rather, that's the basic idea. In fact, what it does it reload the version
+        of the cache that's currently on disk and updates it with new info instead of
+        replacing the one on disk. The reason for this, of course, is that this
+        script has become complex enough that it may take more than an hour to run on
+        the slow old laptop that hosts it ... and so there may be multiple copies
+        running, each of which thinks it has the "master copy" in memory. To help
+        ameliorate the potential for race conditions, we update instead of overwriting.
+        #FIXME: That's not a perfect solution: We should be locking or at least using
+        exclusive-opening on the cache in addition to updating the cache itself, but
+        it's probably good enough most of the time. Anyway, this is a cache: worst case
+        scenario is that we delete it manually and no longer have memoization data for
+        the comparatively slow calculations. Oh well, it'll be recalculated.
+    
+        In fact, we should be using some sort of real database-like thing, because the
+        overhead of keeping all this data in memory could in theory grow quite large.
+        """
+        if not self.dirty:
+            log_it("Skipping cache update: no changes made!")
+            return
 
-def get_similarity(one, two):
-    """Checks to see if the similarity between ONE and TWO is already known. If it is,
-    returns that similarity. Otherwise, calculates the similarity and stores it in
-    the global similarity cache, which is written at the end of the script's run.
+        log_it("Updating similarity data cache on disk ...", 3)
+        try:
+            with bz2.open(self.cache_file, "rb") as cache_file:
+                old = pickle.load(cache_file)
+        except (OSError, EOFError, pickle.PicklingError):
+            old = dict()
+        old.update(self.data)
+        self.data = old
+        with bz2.open(similarity_cache_location, 'wb') as cache_file:
+            pickle.dump(self.data, cache_file, protocol=pickle.HIGHEST_PROTOCOL)
+        log_it("... updated!", 3)
+        self.dirty = False
+    
+    @staticmethod
+    def calculate_overlap(one, two):
+        """return the percentage of chains in dictionary ONE that are also in
+        dictionary TWO.
+        """
+        overlap_count = 0
+        for which_chain in one.keys():
+            if which_chain in two: overlap_count += 1
+        return overlap_count / len(one)
+    
+    def calculate_similarity(self, one, two, markov_length=5):
+        """Come up with a score evaluating how similar the two texts are to each other.
+        This actually means, more specifically, "the product of (a) the percentage of
+        chains in the set of chains of length MARKOV_LENGTH constructed from text ONE;
+        multiplied by (b) the percentage of chains of length MARKOV_LENGTH constructed
+        from text TWO.
+    
+        This routine also caches the calculated result in the global variable
+        similarity_cache. It's a comparatively expensive calculation to make, so if
+        we're making it, we should store the current value.
+        """
+        log_it("calculate_similarity() called for: %s" % [one, two], 5)
+        chains_one = get_mappings(one, markov_length)
+        chains_two = get_mappings(two, markov_length)
+        ret = self.calculate_overlap(chains_one, chains_two) * self.calculate_overlap(chains_two, chains_one)
+        self.data[tuple(sorted([one, two]))] = {'when': datetime.datetime.now(), 'similarity': ret}
+        self.dirty = True
+        return ret
+    
+    def get_similarity(self, one, two):
+        """Checks to see if the similarity between ONE and TWO is already known. If it is,
+        returns that similarity. Otherwise, calculates the similarity and stores it in
+        the global similarity cache, which is written at the end of the script's run.
+    
+        In short, this function takes advantage of the memoization of
+        calculate_similarity, also taking taking advantage of the fact that
+        calculate_similarity(A, B) = calculate_similarity(B, A). It also watches to make
+    	sure that neither of the texts involved has been changed since the calculation
+    	was initially made. If either has, it re-performs the calculation and stores
+    	the updated result in the cache.
+    
+        Note that calculate_similarity() itself stores the results of the function. This
+        function only takes advantage of the stored values.
+        """
+        index = tuple(sorted([one, two]))               # Always index in lexicographical order
+        log_it("get_similarity() called for files: %s" % list(index), 5)
+        if index in self.data:                   # If it's in the cache, and the data isn't stale ...
+            if self.data[index]['when'] < datetime.datetime.fromtimestamp(os.path.getmtime(one)):
+                log_it("  ... but cached data is stale relative to %s !" % one, 6)
+                return self.calculate_similarity(one, two)
+            if self.data[index]['when'] < datetime.datetime.fromtimestamp(os.path.getmtime(two)):
+                log_it("  ... but cached data is stale relative to %s !" % two, 6)
+                return self.calculate_similarity(one, two)
+            log_it(" ... returning cached value!", 6)
+            return self.data[index]['similarity']
+        log_it(" ... not found in cache! Calculating and cacheing ...", 6)
+        return self.calculate_similarity(one, two)
 
-    In short, this function takes advantage of the memoization of
-    calculate_similarity, also taking taking advantage of the fact that
-    calculate_similarity(A, B) = calculate_similarity(B, A). It also watches to make
-	sure that neither of the texts involved has been changed since the calculation
-	was initially made. If either has, it re-performs the calculation and stores
-	the updated result in the cache.
+    def build_cache(self):
+        """Forces the cache to be fully populated by making comparisons sequentially between
+        all texts in the corpus.
+        
+        Never called by the main processing loop, but available for manual maintenance.
+        """
+        try:
+            for count, i in enumerate(glob.glob(poetry_corpus + '/*')):
+                if count % 20 == 0:
+                    log_it("We've run full comparisons for %d source texts." % count)
+                for j in glob.glob(poetry_corpus + '/*'):
+                    _ = self.get_similarity(i, j)
+        except Exception as e:
+            pass
+        finally:
+            self.flush_cache()
+    
+    def clean_cache(self):
+        """Goes through the cache, finding invalid entries and removing them. "Invalid"
+        means any of these things: caches data for a non-existent file; data is stale;
+        cached data is malformed and unreadable.
 
-    Note that calculate_similarity() itself stores the results of the function. This
-    function only takes advantage of the stored values.
-    """
-    index = tuple(sorted([one, two]))               # Always index in lexicographical order
-    log_it("get_similarity() called for files: %s" % list(index), 5)
-    if index in similarity_cache:                   # If it's in the cache, and the data isn't stale ...
-        if similarity_cache[index]['when'] < datetime.datetime.fromtimestamp(os.path.getmtime(one)):
-            log_it("  ... but cached data is stale relative to %s !" % one, 6)
-            return calculate_similarity(one, two)
-        if similarity_cache[index]['when'] < datetime.datetime.fromtimestamp(os.path.getmtime(two)):
-            log_it("  ... but cached data is stale relative to %s !" % two, 6)
-            return calculate_similarity(one, two)
-        log_it(" ... returning cached value!", 6)
-        return similarity_cache[index]['similarity']
-    log_it(" ... not found in cache! Calculating and cacheing ...", 6)
-    return calculate_similarity(one, two)
+        Never called by the main processing loop, but available for manual maintenance.
+        """
+        num_checked = 0
+        cleaned_data = self.data.copy()        
+        try:
+            for one, two in self.data:   # Unpack each tuple.
+                num_checked += 1
+                try:
+                    assert os.path.exists(one), "file doesn't exist: %s" % one
+                    assert os.path.exists(two), "file doesn't exist: %s" % two
+                    assert self.data[(one, two)]['when'] >= datetime.datetime.fromtimestamp(os.path.getmtime(one)), "%s is stale!" % one
+                    assert self.data[(one, two)]['when'] >= datetime.datetime.fromtimestamp(os.path.getmtime(two)), "%s is stale!" % two
+                    _ = float(self.data[(one, two)]['similarity'])
+                except (AssertionError, IndexError, TypeError) as problem:
+                    log_it("Deleting entry #%d, (%s, %s), because %s." % (num_checked, one, two, problem))
+                    self.dirty = True
+                    del cleaned_data[(one, two)]
+                except Exception as problem:
+                    log_it("unhandled problem on item #%d: %s" % (num_checked, problem))
+                if num_checked % 1000 == 0:
+                    log_it("Checked %d entries; that's %s %%!" % (num_checked, 100 * (num_checked / len(self.data))))
+        finally:
+            self.data = cleaned_data
+            if self.dirty:
+                with bz2.open(similarity_cache_location, 'wb') as cache_file:               # Don't UPDATE the existing dictionary with pruned data ...
+                    pickle.dump(self.data, cache_file, protocol=pickle.HIGHEST_PROTOCOL)    # That would make the whole process pointless
+                self.dirty = False
+                log_it("Cache updated!")
+            else:
+                log_it("Skipping cache update: no changes made!")
+                
+
+similarity_cache = SimilarityCache()
 
 
 oldmethod = False               # Set to True when tweaking the newer method to use the old method as a fallback.
@@ -506,7 +628,7 @@ def get_source_texts():
     available = [f for f in glob.glob(poetry_corpus + '/*') if not os.path.isdir(f)]
     if oldmethod:
         log_it(" ... according to the old (pure random choice) method")
-        return random.sample(available, random.randint(75, 200))
+        return random.sample(available, random.randint(150, 600))
     else:
         ret = random.sample(available, random.randint(3, 7))   # Seed the pot with several random source texts.
         for i in ret: ret.remove(i)                                 # Make sure already-chosen texts are not eligible to be chosen again.
@@ -519,7 +641,7 @@ def get_source_texts():
             available.remove(current_choice)
             changed = False
             for i in ret:
-                if random.random() < (get_similarity(i, current_choice) / len(ret)):
+                if random.random() < (similarity_cache.get_similarity(i, current_choice) / len(ret)):
                     ret += [ current_choice ]
                     changed = True
                     break
@@ -528,133 +650,20 @@ def get_source_texts():
             if candidates % 5 == 0:
                 log_it("    ... %d selection candidates" % candidates, 4)
                 if changed:
-                    if (1 - random.random() ** 4) < ((len(ret) - 100) / 200):
+                    if (1 - random.random() ** 4.5) < ((len(ret) - 160) / 200):
                         done = True
             if candidates % 25 == 0:
                 log_it("  ... %d selected texts in %d candidates" % (len(ret), candidates), 3)
         the_tags += ["rejected training texts: %d" % (candidates - len(ret))]
         log_it("  ... selected %d texts" % len(ret), 2)
+        similarity_cache.flush_cache()
         return ret
-
-
-# These next two functions manage the global cache of text similarities. There's a function that reads it into
-# memory to prepare for the run, and another function that writes the data to disk when the run is done. In between,
-# get_similarity() and its subsidiary functions may (usually WILL) modify the contents.
-
-# This cache is a dictionary:
-#     { (text_path_one, text_path_two):         (a tuple)
-#           { 'when':,                          (a datetime: when the calculation was made)
-#             'similarity':                     (a value between 0 and 1, heavily weighted toward zero)
-#               }
-#          }
-def get_cache():
-    """Opens the existing cache and makes it available as a global variable, or else
-    returns an empty cache that will be modified and written out to disk after this
-    run.
-    """
-    global similarity_cache
-    try:
-        with bz2.open(similarity_cache_location, "rb") as cache_file:
-            log_it("Loading cached similarity data ...", 3)
-            return pickle.load(cache_file)
-    except (OSError, EOFError, pickle.PicklingError):
-        return dict()
-
-def flush_cache():
-    """Writes the textual similarity cache to disk and invalidates the global
-    reference to it. This should be done only after the similarity cache is no
-    longer needed, of course.
-
-    Or, rather, that's the basic idea. In fact, what it does it reload the version
-    of the cache that's currently on disk and updates it with new info instead of
-    replacing the one on disk. The reason for this, of course, is that this
-    script has become complex enough that it may take more than an hour to run on
-    the slow old laptop that hosts it ... and so there may be multiple copies
-    running, each of which thinks it has the "master copy" in memory. To help
-    amelioriate the potential for race conditions, we update instead of overwriting.
-    #FIXME: That's not a perfect solution: We should be locking or at least using
-    exclusive-opening on the cache in addition to updating the cache itself, but
-    it's probably good enough most of the time. Anyway, this is a cache: worst case
-    scenario is that we delete it manually and no longer have memoization data for
-    the comparatively slow calculations. Oh well, it'll be recalculated.
-
-    In fact, we should be using some sort of real database-like thing, because the
-    overhead of keeping all this data in memory could in theory grow quite large.
-    """
-    global similarity_cache
-    log_it("Updating similarity data cache on disk ...", 3)
-    try:
-        with bz2.open(similarity_cache_location, "rb") as cache_file:
-            old = pickle.load(cache_file)
-    except (OSError, EOFError, pickle.PicklingError):
-        old = dict()
-    old.update(similarity_cache)
-    with bz2.open(similarity_cache_location, 'wb') as cache_file:
-        pickle.dump(old, cache_file, protocol=pickle.HIGHEST_PROTOCOL)
-    del similarity_cache
-    log_it("... updated!", 3)
-
-# And here are some cache-maintenance functions. They are never called by the main processing loop,
-# but are available for cache maintenance.
-def build_cache():
-    """Forces the cache to be fully populated by making comparisons sequentially between
-    all texts in the corpus.
-    """
-    global similarity_cache
-    try:
-        similarity_cache = get_cache()
-        for count, i in enumerate(glob.glob(poetry_corpus + '/*')):
-            if count % 20 == 0:
-                log_it("We've run full comparisons for %d source texts." % count)
-            for j in glob.glob(poetry_corpus + '/*'):
-                _ = get_similarity(i, j)
-    except Exception as e:
-        pass
-    finally:
-        flush_cache()
-
-def clean_cache():
-    """Goes through the cache, finding invalid entries and removing them. "Invalid"
-    means any of these things: caches data for a non-existent file; data is stale;
-    cached data is malformed and unreadable.
-    """
-    global similarity_cache
-    similarity_cache = get_cache()
-    num_checked = 0
-    try:
-        for one, two in similarity_cache:   # Unpack the tuple.
-            num_checked += 1
-            try:
-                assert os.path.exists(one)
-                assert os.path.exists(two)
-                assert similarity_cache[(one, two)]['when'] >= datetime.datetime.fromtimestamp(os.path.getmtime(one))
-                assert similarity_cache[(one, two)]['when'] >= datetime.datetime.fromtimestamp(os.path.getmtime(two))
-                _ = float(similarity_cache[(one, two)]['similarity'])
-            except (AssertionError, IndexError, TypeError) as problem:
-                log_it("Deleting entry #%d, (%s, %s), because %s." % (num_checked, one, two, problem))
-                del similarity_cache[(one, two)]
-            except Exception as problem:
-                log_it("unhandled problem on item #%d: %s" % (num_checked, problem))
-            if num_checked % 1000 == 0:
-                log_it("Checked %d entries; that's %s %%!" % (num_checked, 100 * (num_checked / len(similarity_cache))))
-    finally:
-        flush_cache()
-
-
-force_debug = False
-if force_debug:  # Force-run minor cleaning tasks from an IDE here.
-    clean_cache()
-    sys.exit()
 
 
 def main():
     global similarity_cache, the_tags, genny
-    # First, read the similarity cache into memory
-    try:
-        similarity_cache = get_cache()
-        sample_texts = get_source_texts()
-    finally:
-        flush_cache()                       # Make sure any changes to calculated similarity data are saved.
+
+    sample_texts = get_source_texts()
 
     # Next, set up the basic parameters for the run
     chain_length = round(min(max(random.normalvariate(7, 3), 3), 10))
