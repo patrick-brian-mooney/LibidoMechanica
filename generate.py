@@ -8,7 +8,7 @@ rather broadly interpreted) picked from a larger corpus of love and romance
 poetry in English. This corpus is itself a work in progress and has known
 problems: as of this writing (1 July 2018), for instance, it disproportionately
 emphasizes canonical British poets from the 15th to the 18th centuries and
-underrepresents poems that (for instance) were written in languages other than
+under-represents poems that (for instance) were written in languages other than
 English; were written by colonial subjects; were written by working-class
 writers; etc. etc. etc. SOME attention (though not enough) has been paid to
 such representational matters, and diversifying the corpus of training texts in
@@ -19,7 +19,7 @@ generator, forked from Harry R. Schwartz's text generator and heavily modified.
 This particular version of the text generator treats individual characters as
 the tokens that are mapped, rather than whole words, as my other text-
 generation projects do. The generator is trained on a variable series of texts
-selected from the corpus, each of which bears SOME computable "similiarity" to
+selected from the corpus, each of which bears SOME computable "similarity" to
 another text already selected -- either a seed text from the beginning or
 another text previously selected in the same manner. The details and thresholds
 for the selection algorithm are currently (1 July 2018) being tweaked quite
@@ -100,10 +100,10 @@ normalization_strategy, stanza_length = None, None
 
 the_tags = ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains']
 
-genny = None                # We'll reassign this soon enough. We want it to be defined in the global namespace, though.
+genny = None            # We'll reassign this soon enough. We want it to be defined in the global namespace, though.
 
 
-def print_usage():    # Note that, currently, nothing calls this.
+def print_usage():      # Note that, currently, nothing calls this.
     """Print the docstring as a usage message to stdout"""
     log_it("INFO: print_usage() was called")
     print(__doc__)
@@ -462,14 +462,14 @@ class SimilarityCache(object):
                 self.data = pickle.load(cache_file)
         except (OSError, EOFError, pickle.PicklingError):
             self.data = dict()
-            
+
     def __del__(self):
         self.flush_cache()
-    
+
     def flush_cache(self):
         """Writes the textual similarity cache to disk, if self.dirty is True. If
         self.dirty is False, it returns without doing anything.
-    
+
         Or, rather, that's the basic idea. In fact, what it does it reload the version
         of the cache that's currently on disk and updates it with new info instead of
         replacing the one on disk. The reason for this, of course, is that this
@@ -482,7 +482,7 @@ class SimilarityCache(object):
         it's probably good enough most of the time. Anyway, this is a cache: worst case
         scenario is that we delete it manually and no longer have memoization data for
         the comparatively slow calculations. Oh well, it'll be recalculated.
-    
+
         In fact, we should be using some sort of real database-like thing, because the
         overhead of keeping all this data in memory could in theory grow quite large.
         """
@@ -502,7 +502,7 @@ class SimilarityCache(object):
             pickle.dump(self.data, cache_file, protocol=pickle.HIGHEST_PROTOCOL)
         log_it("... updated!", 3)
         self.dirty = False
-    
+
     @staticmethod
     def calculate_overlap(one, two):
         """return the percentage of chains in dictionary ONE that are also in
@@ -512,14 +512,14 @@ class SimilarityCache(object):
         for which_chain in one.keys():
             if which_chain in two: overlap_count += 1
         return overlap_count / len(one)
-    
+
     def calculate_similarity(self, one, two, markov_length=5):
         """Come up with a score evaluating how similar the two texts are to each other.
         This actually means, more specifically, "the product of (a) the percentage of
         chains in the set of chains of length MARKOV_LENGTH constructed from text ONE;
         multiplied by (b) the percentage of chains of length MARKOV_LENGTH constructed
         from text TWO.
-    
+
         This routine also caches the calculated result in the global variable
         similarity_cache. It's a comparatively expensive calculation to make, so if
         we're making it, we should store the current value.
@@ -531,19 +531,19 @@ class SimilarityCache(object):
         self.data[tuple(sorted([one, two]))] = {'when': datetime.datetime.now(), 'similarity': ret}
         self.dirty = True
         return ret
-    
+
     def get_similarity(self, one, two):
         """Checks to see if the similarity between ONE and TWO is already known. If it is,
         returns that similarity. Otherwise, calculates the similarity and stores it in
         the global similarity cache, which is written at the end of the script's run.
-    
+
         In short, this function takes advantage of the memoization of
         calculate_similarity, also taking taking advantage of the fact that
         calculate_similarity(A, B) = calculate_similarity(B, A). It also watches to make
-    	sure that neither of the texts involved has been changed since the calculation
-    	was initially made. If either has, it re-performs the calculation and stores
-    	the updated result in the cache.
-    
+        sure that neither of the texts involved has been changed since the calculation
+        was initially made. If either has, it re-performs the calculation and stores
+        the updated result in the cache.
+
         Note that calculate_similarity() itself stores the results of the function. This
         function only takes advantage of the stored values.
         """
@@ -564,20 +564,25 @@ class SimilarityCache(object):
     def build_cache(self):
         """Forces the cache to be fully populated by making comparisons sequentially between
         all texts in the corpus.
-        
+
         Never called by the main processing loop, but available for manual maintenance.
         """
         try:
-            for count, i in enumerate(glob.glob(poetry_corpus + '/*')):
+            for count, i in enumerate(glob.glob(os.path.join(poetry_corpus, '*'))):
                 if count % 20 == 0:
                     log_it("We've run full comparisons for %d source texts." % count)
-                for j in glob.glob(poetry_corpus + '/*'):
-                    _ = self.get_similarity(i, j)
-        except Exception as e:
-            pass
+                for j in glob.glob(os.path.join(poetry_corpus, '*')):
+                    try:
+                        _ = self.get_similarity(i, j)
+                    except Exception as e:
+                        log_it("\nSkipping comparison for these files:")
+                        log_it("    " + i)
+                        log_it("    " + j)
+                        log_it("Because:")
+                        log_it("    " + str(e))
         finally:
             self.flush_cache()
-    
+
     def clean_cache(self):
         """Goes through the cache, finding invalid entries and removing them. "Invalid"
         means any of these things: caches data for a non-existent file; data is stale;
@@ -586,7 +591,7 @@ class SimilarityCache(object):
         Never called by the main processing loop, but available for manual maintenance.
         """
         num_checked = 0
-        cleaned_data = self.data.copy()        
+        cleaned_data = self.data.copy()
         try:
             for one, two in self.data:   # Unpack each tuple.
                 num_checked += 1
@@ -602,7 +607,7 @@ class SimilarityCache(object):
                     del cleaned_data[(one, two)]
                 except Exception as problem:
                     log_it("unhandled problem on item #%d: %s" % (num_checked, problem))
-                if num_checked % 1000 == 0:
+                if num_checked % 100000 == 0:
                     log_it("Checked %d entries; that's %s %%!" % (num_checked, 100 * (num_checked / len(self.data))))
         finally:
             self.data = cleaned_data
@@ -613,7 +618,7 @@ class SimilarityCache(object):
                 log_it("Cache updated!")
             else:
                 log_it("Skipping cache update: no changes made!")
-                
+
 
 similarity_cache = SimilarityCache()
 
@@ -720,8 +725,15 @@ def main():
     archive_name = "%s — %s.json.bz2" % (post_data['time'], the_title)
     with bz2.BZ2File(os.path.join(post_archives, archive_name), mode='wb') as archive_file:
         archive_file.write(json.dumps(post_data, sort_keys=True, indent=3, ensure_ascii=False).encode())
-
     log_it("INFO: We're done")
+
+
+force_cache_update = True
+if force_cache_update:
+    similarity_cache.clean_cache()
+    similarity_cache.build_cache()
+    sys.exit(0)
+
 
 if __name__ == "__main__":
     try:
