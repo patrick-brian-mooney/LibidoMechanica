@@ -728,7 +728,7 @@ def main():
     log_it("INFO: We're done")
 
 
-force_cache_update = True
+force_cache_update = False
 if force_cache_update:
     similarity_cache.clean_cache()
     similarity_cache.build_cache()
