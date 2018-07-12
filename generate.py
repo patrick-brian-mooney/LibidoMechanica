@@ -450,21 +450,20 @@ class SimilarityCache(object):
                   }
              }
     """
+    class SilentError(Exception): pass
+
     def __init__(self, cache_file=similarity_cache_location):
         """Loads the existing cache into memory, if possible, or else returns an empty
         cache that will be modified and written out to disk after this run.
         """
         self.cache_file = cache_file
+        if not cache_file:
+            self.__del__ = lambda *args, **kwargs: None     # Ugh, a terrible hack ... #FIXME
         self.dirty = False
-        try:
-            with bz2.open(similarity_cache_location, "rb") as cache_file:
-                log_it("Loading cached similarity data ...", 3)
-                self.data = pickle.load(cache_file)
-        except (OSError, EOFError, pickle.PicklingError):
-            self.data = dict()
+        self.data, self.index = dict(), dict()
 
-    def __del__(self):
-        self.flush_cache()
+    def __del__(self): pass
+        # self.flush_cache()
 
     def flush_cache(self):
         """Writes the textual similarity cache to disk, if self.dirty is True. If
@@ -495,11 +494,12 @@ class SimilarityCache(object):
             with bz2.open(self.cache_file, "rb") as cache_file:
                 old = pickle.load(cache_file)
         except (OSError, EOFError, pickle.PicklingError):
-            old = dict()
-        old.update(self.data)
-        self.data = old
+            old = SimilarityCache(cache_file=None)
+        old.data.update(self.data)
+        old.index.update(self.index)
+        self.data, self.index = old.data, old.index
         with bz2.open(similarity_cache_location, 'wb') as cache_file:
-            pickle.dump(self.data, cache_file, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump(self, cache_file, protocol=pickle.HIGHEST_PROTOCOL)
         log_it("... updated!", 3)
         self.dirty = False
 
@@ -513,12 +513,40 @@ class SimilarityCache(object):
             if which_chain in two: overlap_count += 1
         return overlap_count / len(one)
 
+    def _get_ID(self, the_file):
+        """Given a full path to a file, return the internal ID number used for the
+        file. If there is no ID assigned to the file yet, assign a new ID number and
+        return it. (This marks the cache as "dirty" and in need of on-disk updating.)
+
+        This function makes absolutely no attempt to deal with the fact that multiple
+        paths can resolve to the same "real file" on disk (e.g., because of symbolic
+        links in the path). During normal use, though, this should never be a problem,
+        because we should always be using the path to the texts that is specified in
+        the config constants above. If those ever change, though, the cache will
+        probably need to be cleaned and/or rebuilt manually.
+        """
+        if the_file in self.index:
+            return self.index[the_file]
+        else:
+            try:
+                new_index = 1 + max(self.index.values())
+            except ValueError:
+                new_index = 1 + len(self.index)
+            while new_index in self.index.values():
+                new_index += 1
+            self.index[the_file] = new_index
+            self.dirty = True
+            return new_index
+
     def calculate_similarity(self, one, two, markov_length=5):
         """Come up with a score evaluating how similar the two texts are to each other.
         This actually means, more specifically, "the product of (a) the percentage of
-        chains in the set of chains of length MARKOV_LENGTH constructed from text ONE;
-        multiplied by (b) the percentage of chains of length MARKOV_LENGTH constructed
-        from text TWO.
+        chains in the set of chains of length MARKOV_LENGTH constructed from text ONE
+        that are also in text TWO; multiplied by (b) the percentage of chains of
+        length MARKOV_LENGTH constructed from text TWO that are also in chains
+        constructed from text ONE.
+
+        Note that ONE and TWO are file names, not internal ID numbers.
 
         This routine also caches the calculated result in the global variable
         similarity_cache. It's a comparatively expensive calculation to make, so if
@@ -528,7 +556,7 @@ class SimilarityCache(object):
         chains_one = get_mappings(one, markov_length)
         chains_two = get_mappings(two, markov_length)
         ret = self.calculate_overlap(chains_one, chains_two) * self.calculate_overlap(chains_two, chains_one)
-        self.data[tuple(sorted([one, two]))] = {'when': datetime.datetime.now(), 'similarity': ret}
+        self.data[tuple(sorted([self._get_ID(one), self._get_ID(two)]))] = {'when': datetime.datetime.now(), 'similarity': ret}
         self.dirty = True
         return ret
 
@@ -547,7 +575,7 @@ class SimilarityCache(object):
         Note that calculate_similarity() itself stores the results of the function. This
         function only takes advantage of the stored values.
         """
-        index = tuple(sorted([one, two]))               # Always index in lexicographical order
+        index = tuple(sorted([self._get_ID(one), self._get_ID(two)]))
         log_it("get_similarity() called for files: %s" % list(index), 5)
         if index in self.data:                   # If it's in the cache, and the data isn't stale ...
             if self.data[index]['when'] < datetime.datetime.fromtimestamp(os.path.getmtime(one)):
@@ -571,6 +599,7 @@ class SimilarityCache(object):
             for count, i in enumerate(glob.glob(os.path.join(poetry_corpus, '*'))):
                 if count % 20 == 0:
                     log_it("We've run full comparisons for %d source texts." % count)
+                    if count: self.flush_cache()
                 for j in glob.glob(os.path.join(poetry_corpus, '*')):
                     try:
                         _ = self.get_similarity(i, j)
@@ -583,6 +612,15 @@ class SimilarityCache(object):
         finally:
             self.flush_cache()
 
+    def _name_from_ID(self, id):
+        """Given an ID number for a file, returns the filename. Returns None if we have
+        no such ID number.
+        """
+        try:
+            return [f for f in self.index if self.index[f]==id][0]
+        except (IndexError,):
+            return None
+
     def clean_cache(self):
         """Goes through the cache, finding invalid entries and removing them. "Invalid"
         means any of these things: caches data for a non-existent file; data is stale;
@@ -590,21 +628,27 @@ class SimilarityCache(object):
 
         Never called by the main processing loop, but available for manual maintenance.
         """
+        assert False, "ERROR: clean_cache() has not been updated to work with the new data structure!"
+
+        # First, run through the filename-to-ID mappings, making sure that all files referenced still exist.
+        existent_files = [f for f in self.index if os.path.isfile(f)]
+        missing_files = {f: self.index[f] for f in self.index if f not in existent_files}
         num_checked = 0
         cleaned_data = self.data.copy()
+
         try:
-            for one, two in self.data:   # Unpack each tuple.
+            for id_one, id_two in self.data:   # Unpack each tuple.
                 num_checked += 1
                 try:
-                    assert os.path.exists(one), "file doesn't exist: %s" % one
-                    assert os.path.exists(two), "file doesn't exist: %s" % two
-                    assert self.data[(one, two)]['when'] >= datetime.datetime.fromtimestamp(os.path.getmtime(one)), "%s is stale!" % one
-                    assert self.data[(one, two)]['when'] >= datetime.datetime.fromtimestamp(os.path.getmtime(two)), "%s is stale!" % two
-                    _ = float(self.data[(one, two)]['similarity'])
+                    assert id_one not in missing_files, "file doesn't exist: %s" % self._name_from_ID(id_one)
+                    assert id_two not in missing_files, "file doesn't exist: %s" % self._name_from_ID(id_two)
+                    assert self.data[(id_one, id_two)]['when'] >= datetime.datetime.fromtimestamp(os.path.getmtime(self._name_from_ID(id_one))), "%s is stale!" % self._name_from_ID(id_one)
+                    assert self.data[(id_one, id_two)]['when'] >= datetime.datetime.fromtimestamp(os.path.getmtime(self._name_from_ID(id_two))), "%s is stale!" % self._name_from_ID(id_two)
+                    _ = float(self.data[(id_one, id_two)]['similarity'])
                 except (AssertionError, IndexError, TypeError) as problem:
-                    log_it("Deleting entry #%d, (%s, %s), because %s." % (num_checked, one, two, problem))
+                    log_it("Deleting entry #%d, (%s, %s), because %s." % (num_checked, self._name_from_ID(id_one), self._name_from_ID(id_two), problem))
                     self.dirty = True
-                    del cleaned_data[(one, two)]
+                    del cleaned_data[(id_one, id_two)]
                 except Exception as problem:
                     log_it("unhandled problem on item #%d: %s" % (num_checked, problem))
                 if num_checked % 100000 == 0:
@@ -620,7 +664,14 @@ class SimilarityCache(object):
                 log_it("Skipping cache update: no changes made!")
 
 
-similarity_cache = SimilarityCache()
+# OK, let's load the cached data
+try:
+    with bz2.open(similarity_cache_location, "rb") as cache_file:
+        log_it("Loading cached similarity data ...", 3)
+        similarity_cache = pickle.load(cache_file)
+except (OSError, EOFError, AttributeError, pickle.PicklingError) as err:
+    log_it("WARNING! Unable to load cached similarity data. Preparing empty cache ...")
+    similarity_cache = SimilarityCache()
 
 
 oldmethod = False               # Set to True when tweaking the newer method to use the old method as a fallback.
@@ -645,7 +696,7 @@ def get_source_texts():
             current_choice = random.choice(available)
             available.remove(current_choice)
             changed = False
-            for i in ret:
+            for i in ret:            # Give each already-chosen text a chance to "claim" the new one
                 if random.random() < (similarity_cache.get_similarity(i, current_choice) / len(ret)):
                     ret += [ current_choice ]
                     changed = True
@@ -728,9 +779,9 @@ def main():
     log_it("INFO: We're done")
 
 
-force_cache_update = False
+force_cache_update = True
 if force_cache_update:
-    similarity_cache.clean_cache()
+    # similarity_cache.clean_cache()
     similarity_cache.build_cache()
     sys.exit(0)
 
