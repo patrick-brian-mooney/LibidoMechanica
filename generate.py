@@ -441,27 +441,24 @@ def get_mappings(f, markov_length):
     return pg.PoemGenerator(training_texts=[f], markov_length=markov_length).chains.the_mapping
 
 
-class SimilarityCache(object):
+class SimilarityCache(dict):
     """This class is an object that manages the global cache of text similarities.
 
     The object's internal data cache is a dictionary:
-        { (text_path_one, text_path_two):         (a tuple)
+        { (text_name_one, text_name_two):         (a tuple)
               { 'when':,                          (a datetime: when the calculation was made)
                 'similarity':                     (a value between 0 and 1, rather heavily weighted toward zero)
                   }
              }
     """
-    def __init__(self, cache_file=similarity_cache_location):
-        """Loads the existing cache into memory, if possible, or else returns an empty
-        cache that will be modified and written out to disk after this run.
-        """
+    def __init__(self, cache_file=similarity_cache_location, *args, **kwargs):
+        dict.__init__(self, *args, **kwargs)
+        self._dirty = False
         self.cache_file = cache_file
-        self.dirty = False
-        self.data = dict()
 
-    def flush_cache(self):
-        """Writes the textual similarity cache to disk, if self.dirty is True. If
-        self.dirty is False, it returns without doing anything.
+    def flush_cache(self):              #FIXME!
+        """Writes the textual similarity cache to disk, if self._dirty is True. If
+        self._dirty is False, it returns without doing anything.
 
         Or, rather, that's the basic idea. In fact, what it does it reload the version
         of the cache that's currently on disk and updates it with new info instead of
@@ -470,6 +467,7 @@ class SimilarityCache(object):
         the slow old laptop that hosts it ... and so there may be multiple copies
         running, each of which thinks it has the "master copy" in memory. To help
         ameliorate the potential for race conditions, we update instead of overwriting.
+
         #FIXME: That's not a perfect solution: We should be locking or at least using
         exclusive-opening on the cache in addition to updating the cache itself, but
         it's probably good enough most of the time. Anyway, this is a cache: worst case
@@ -479,25 +477,21 @@ class SimilarityCache(object):
         In fact, we should be using some sort of real database-like thing, because the
         overhead of keeping all this data in memory could in theory grow quite large.
         """
-        if not self.dirty:
+        if not self._dirty:
             log_it("Skipping cache update: no changes made!")
             return
-        if not self.cache_file:
-            self.dirty = False
-            return
-
         log_it("Updating similarity data cache on disk ...", 3)
         try:
             with bz2.open(self.cache_file, "rb") as cache_file:
                 old = pickle.load(cache_file)
         except (OSError, EOFError, pickle.PicklingError):
-            old = SimilarityCache(cache_file=None)
-        old.data.update(self.data)
-        self.data = old.data
+            old = SimilarityCache
+        old.update(self)
+        self = old
         with bz2.open(similarity_cache_location, 'wb') as cache_file:
             pickle.dump(self, cache_file, protocol=pickle.HIGHEST_PROTOCOL)
         log_it(" ... updated!", 3)
-        self.dirty = False
+        self._dirty = False
 
     @staticmethod
     def calculate_overlap(one, two):
@@ -527,10 +521,8 @@ class SimilarityCache(object):
         chains_one = get_mappings(one, markov_length)
         chains_two = get_mappings(two, markov_length)
         ret = self.calculate_overlap(chains_one, chains_two) * self.calculate_overlap(chains_two, chains_one)
-        self.data[tuple(sorted([os.path.basename(one), os.path.basename(two)]))] = {'when': time.time(),
-                                                                                    'similarity': ret,
-                                                                                    }
-        self.dirty = True
+        self[tuple(sorted([os.path.basename(one), os.path.basename(two)]))] = {'when': time.time(), 'similarity': ret,}
+        self._dirty = True
         return ret
 
     def get_similarity(self, one, two):
@@ -552,83 +544,29 @@ class SimilarityCache(object):
         index = tuple(sorted([os.path.basename(one), os.path.basename(two)]))
         log_it("get_similarity() called for files: %s" % list(index), 5)
 
-        if index in self.data:                   # If it's in the cache, and the data isn't stale ...
-            if self.data[index]['when'] < os.path.getmtime(one):
+        if index in self:                       # If it's in the cache, and the data isn't stale ...
+            if self[index]['when'] < os.path.getmtime(one):
                 log_it("  ... but cached data is stale relative to %s !" % one, 6)
                 return self.calculate_similarity(one, two)
-            if self.data[index]['when'] < os.path.getmtime(two):
+            if self[index]['when'] < os.path.getmtime(two):
                 log_it("  ... but cached data is stale relative to %s !" % two, 6)
                 return self.calculate_similarity(one, two)
             log_it(" ... returning cached value!", 6)
-            return self.data[index]['similarity']
+            return self[index]['similarity']
 
         log_it(" ... not found in cache! Calculating and cacheing ...", 6)
         return self.calculate_similarity(one, two)
 
     def build_cache(self):
-        """Forces the cache to be fully populated by making comparisons sequentially between
-        all texts in the corpus.
-
-        Never called by the main processing loop, but available for manual maintenance.
-        """
-        try:
-            for count, i in enumerate(sorted(glob.glob(os.path.join(poetry_corpus, '*')))):
-                if count % 10 == 0:
-                    log_it("It's %s, and we've run full comparisons for %d source texts." % (datetime.datetime.now(), count))
-                    if count: self.flush_cache()
-                for subcount, j in enumerate(sorted(glob.glob(os.path.join(poetry_corpus, '*')))):
-                    try:
-                        _ = self.get_similarity(i, j)
-                    except Exception as e:
-                        log_it("\nSkipping comparison for these files:")
-                        log_it("    " + i)
-                        log_it("    " + j)
-                        log_it("Because:")
-                        log_it("    " + str(e))
-        finally:
-            self.flush_cache()
-
-    def clean_cache(self):
-        """Goes through the cache, finding invalid entries and removing them. "Invalid"
-        means any of these things: caches data for a non-existent file; data is stale;
-        cached data is malformed and unreadable.
-
-        Never called by the main processing loop, but available for manual maintenance.
-        """
-        assert False, "ERROR: clean_cache() has not been updated to work with the new data structure!"
-
-        # First, run through the filename-to-ID mappings, making sure that all files referenced still exist.
-        existent_files = [f for f in self.index if os.path.isfile(f)]
-        missing_files = {f: self.index[f] for f in self.index if f not in existent_files}
-        num_checked = 0
-        cleaned_data = self.data.copy()
-
-        try:
-            for id_one, id_two in self.data:   # Unpack each tuple.
-                num_checked += 1
-                try:
-                    assert id_one not in missing_files, "file doesn't exist: %s" % self._name_from_ID(id_one)
-                    assert id_two not in missing_files, "file doesn't exist: %s" % self._name_from_ID(id_two)
-                    assert self.data[(id_one, id_two)]['when'] >= datetime.datetime.fromtimestamp(os.path.getmtime(self._name_from_ID(id_one))), "%s is stale!" % self._name_from_ID(id_one)
-                    assert self.data[(id_one, id_two)]['when'] >= datetime.datetime.fromtimestamp(os.path.getmtime(self._name_from_ID(id_two))), "%s is stale!" % self._name_from_ID(id_two)
-                    _ = float(self.data[(id_one, id_two)]['similarity'])
-                except (AssertionError, IndexError, TypeError) as problem:
-                    log_it("Deleting entry #%d, (%s, %s), because %s." % (num_checked, self._name_from_ID(id_one), self._name_from_ID(id_two), problem))
-                    self.dirty = True
-                    del cleaned_data[(id_one, id_two)]
-                except Exception as problem:
-                    log_it("unhandled problem on item #%d: %s" % (num_checked, problem))
-                if num_checked % 100000 == 0:
-                    log_it("Checked %d entries; that's %s %%!" % (num_checked, 100 * (num_checked / len(self.data))))
-        finally:
-            self.data = cleaned_data
-            if self.dirty:
-                with bz2.open(similarity_cache_location, 'wb') as cache_file:               # Don't UPDATE the existing dictionary with pruned data ...
-                    pickle.dump(self.data, cache_file, protocol=pickle.HIGHEST_PROTOCOL)    # That would make the whole process pointless
-                self.dirty = False
-                log_it("Cache updated!")
-            else:
-                log_it("Skipping cache update: no changes made!")
+        log_it("Building cache ...")
+        for i, first_text in enumerate(sorted(glob.glob(os.path.join(poetry_corpus, '*')))):
+            if i % 5 == 0:
+                log_it("  We've performed full calculations for %d texts!" % i)
+                if i:
+                    self.flush_cache()
+            for j, second_text in enumerate(sorted(glob.glob(os.path.join(poetry_corpus, '*')))):
+                log_it("About to compare %s to %s ..." % (os.path.basename(first_text), os.path.basename(second_text)), 6)
+                _ = self.get_similarity(first_text, second_text)
 
 
 # OK, let's load the cached data
@@ -747,9 +685,9 @@ def main():
     log_it("INFO: We're done")
 
 
-force_cache_update = False
+force_cache_update = True
 if force_cache_update:
-    # similarity_cache.clean_cache()
+    # similarity_cache.clean_cache()            #FIXME!
     similarity_cache.build_cache()
     sys.exit(0)
 

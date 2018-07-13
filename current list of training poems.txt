@@ -24,7 +24,6 @@ Adrienne Rich: "Twenty-One Love Poems [Poem XVIII]"
 Adrienne Rich: "Twenty-One Love Poems [Poem XX]"
 Adrienne Rich: "Twenty-One Love Poems [Poem XXI]"
 Adrienne Rich: "Twenty-One Love Poems [The Floating Poem, Unnumbered]"
-A.E. Housman, "When I Was One-And-Twenty"
 Aemilia Lanyer, "Eves Apologie" [from Salve Deus Rex Judæorum]
 Aemilia Lanyer, "To all vertuous Ladies in generall"
 A.E. Stallings, "Actaeon"
@@ -84,6 +83,7 @@ Angela Veronica Wong: "Elsa Is Involved in a Clandestine Love Affair"
 Angelina Weld Grimké: "El Beso"
 Anna Journey: "Accidental Blues Voice"
 Anna Journey: "Wedding Night: We Share an Heirloom Tomato on Our Hotel Balcony Overlooking the Ocean in Which Natalie Wood Drowned"
+Anna Lætitia Barbauld: "To a Little Invisible Being Who is Expected Soon to Become Visible"
 Anna Swir, "I'll Open the Window"
 Ann Drysdale: "Friday"
 Anne Bradstreet: "To My Dear and Loving Husband"
@@ -193,6 +193,8 @@ Catherine Barnett: "O Esperanza!"
 C. D. Wright: "Imaginary Morning Glory"
 Charles Bernstein: "All the Whiskey in Heaven"
 Charlotte Mary Mew, "A Quoi Bon Dire"
+Charlotte Smith: "Sonnet Written at the Close of Spring"
+Charlotte Smith: "To Night"
 Christie Ann Reynolds: "I Want the Certainty of Love in Another Language"
 Christina Rosetti, "'I loved you first: but afterwards your love'"
 Christina Rosetti, "Remember"
@@ -295,10 +297,7 @@ Elinor Wylie: "Valentine"
 Eliza Acton: "I Love Thee"
 Elizabeth Akers Allen: "Famous Love and Romance Poets"
 Elizabeth Barrett Browning, "Grief"
-Elizabeth Barrett Browning, "How Do I Love Thee?"
 Elizabeth Barrett Browning: "Love"
-Elizabeth Barrett Browning, Sonnet 14 ("If thou must love me")
-Elizabeth Barrett Browning, Sonnets from the Portuguese XIII ("And wilt thou have me fashion into speech")
 Elizabeth Bishop: "One Art"
 Ella Wheeler Wilcox, "I Love You"
 Ella Wheeler Wilcox, "Love's Coming"
@@ -332,7 +331,6 @@ Emily Dickinson, "I Taste a Liquor"
 Emily Dickinson: "It's all I have to bring today (26)"
 Emily Dickinson, "It's Such a Little Thing"
 Emily Dickinson, "My Friend Must Be a Bird"
-Emily Dickinson, "Proud of My Broken Heart"
 Emily Dickinson, "That I did always love"
 Emily Dickinson, "That it will never come again"
 Emily Dickinson, "To Lose Thee"
@@ -358,12 +356,16 @@ Geffrey Davis: "King County Metro"
 Geffrey Davis: "The Epistemology of Rosemary"
 Geoffrey Chaucer: "The Love Unfeigned"
 Geoffrey Chaucer, "The Wife of Bath's Prologue and Tale"
+George Darley: "It is not Beauty I Demand"
+George Darley: "Song" ["Sweet in her Green Dell"]
+George Darley: "The Mermaidens' Vesper Hymn"
+George Darley: "The Moon and the Sea"
+George Darley: "To Helene"
 George Eliot: "Felix Holt, Radical"
 George Etherege, "Sylvia"
 George Gascoigne, "Fie, Pleasure, Fie!"
 George Gascoigne, "The Lullaby of a Lover"
 George Gordon, Lord Byron: "Don Juan: Canto 01"
-George Gordon, Lord Byron: "Don Juan: Canto 01"George Gordon, Lord Byron: "Don Juan: Canto 17"
 George Gordon, Lord Byron: "Don Juan: Canto 02"
 George Gordon, Lord Byron: "Don Juan: Canto 03"
 George Gordon, Lord Byron: "Don Juan: Canto 04"
@@ -379,6 +381,7 @@ George Gordon, Lord Byron: "Don Juan: Canto 13"
 George Gordon, Lord Byron: "Don Juan: Canto 14"
 George Gordon, Lord Byron: "Don Juan: Canto 15"
 George Gordon, Lord Byron: "Don Juan: Canto 16"
+George Gordon, Lord Byron: "Don Juan: Canto 17"
 George Gordon, Lord Byron: "Don Juan: Dedication"
 George Gordon, Lord Byron, "She Walks in Beauty"
 George Gordon, Lord Byron, "So We'll Go No More A-Roving"
@@ -416,6 +419,7 @@ Jack Spicer: "A Book of Music"
 Jalal al: "Their Secret Was"
 Jalal al: "What Was Told, That"
 James Kimbrell: "Elegy for My Mother's Ex-Boyfriend"
+James Manson: "The Hunter's Daughter"
 James Russell Lowell: "Love"
 James Schuyler, "Buried at Springs"
 James Weldon Johnson: "The Awakening"
@@ -437,10 +441,13 @@ Jenny Johnson: "Gay Marriage Poem"
 Jill Alexander Essbaum, "Poem"
 Jillian Weise: "Beside You on Main Street"
 Jim Moore: "Diptych: My Bracelet"
+Joanna Baillie: "Woo’d and Married and a’"
 Johann Wolfgang von Goethe: "Night Thoughts"
 John Boyle O'Reilly: "The White Rose"
-John Clare: "Famous Love and Romance Poems"
+John Clare: "An Invite, to Eternity"
+John Clare: "First Love"
 John Clare: "I Hid My Love"
+John Clare: "Song" ["I peeled bits of straws"]
 John Clare: "Song of Secret Love"
 John Clare, "To Mary"
 John Cooper Clark, "I Wanna Be Yours"
@@ -564,6 +571,54 @@ Laura Kasischke: "Daysleep"
 Leigh Hunt, "Jenny Kissed Me"
 Linda Gregg: "We Manage Most When We Manage Small"
 Linda Pastan: "I Married You"
+Link to A.E. Housman, "When I Was One-And-Twenty"
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 01
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 02
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 03
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 04
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 05
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 06
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 07
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 08
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 09
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 10
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 11
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 12
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 13
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 14
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 15
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 16
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 17
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 18
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 19
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 20
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 21
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 22
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 23
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 24
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 25
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 26
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 27
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 28
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 29
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 30
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 31
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 32
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 33
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 34
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 35
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 36
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 37
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 38
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 39
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 40
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 41
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 42
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 43
+Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 44
+Link to Emily Dickinson, "Proud of My Broken Heart"
+Link to Thomas Hardy, "A Broken Appointment"
+Link to William Blake: "Broken Love"
 Lisa Ciccarello: "At night, by marriage"
 Lisa Olstein, "Dear One Absent This Long While"
 Lisa Olstein: "Where the Use of Cannon Is Impractical"
@@ -1256,8 +1311,11 @@ Thomas Carew: "A Rapture"
 Thomas Carew: "A Song"
 Thomas Ford, "There Is a Lady Sweet and Kind"
 Thomas Greaves: "Come Away, Come Away, Sweet Love"
-Thomas Hardy, "A Broken Appointment"
 Thomas Hardy, "Neutral Tones"
+Thomas Lovell Beddoes: "Song: ‘How many times do I love thee, dear?’"
+Thomas Lovell Beddoes: "The Phantom Wooer"
+Thomas More: "Believe Me, If All Those Endearing Young Charms"
+Thomas More: "The Time I’ve Lost in Wooing"
 Thomas Nashe, "Spring, the sweet spring"
 Timothy Liu: "Holding Pattern"
 T. Merrill: "Come Lord and Lift"
@@ -1272,10 +1330,14 @@ T.S. Eliot: "The Love Song of J. Alfred Prufrock"
 Walid Khazindar: "Distant light"
 Wallace Stevens: "Re-Statement of Romance"
 Walter Savage Landor, "Mild Is the Parting Year"
+Walter Savage Landor: "Mother, I cannot Mind my Wheel"
 Walter Savage Landor, "Rose Aylmer"
 Walter Savage Landor, "Soon, O Iolanthe!"
+Walter Savage Landor: "Twenty Years Hence"
+Walter Savage Landor: "Well I Remember How You Smiled"
 Walter Savage Landor, "Who Ever Felt as I"
 Walter Savage Landor, "You Smiled"
+Walter Savage Landor: "You Smiled, You Spoke, and I Believed"
 Walt Whitman, "A Glimpse"
 Walt Whitman, "To a Stranger"
 Walt Whitman: "We Two, How Long We Were Fool'd"
@@ -1296,7 +1358,6 @@ William Blake: "Ah! Sun-Flower"
 William Blake: "An Imitation of Spenser"
 William Blake: "A Poison Tree"
 William Blake: "Blind Mans Buff"
-William Blake: "Broken Love"
 William Blake: "Cradle Song"
 William Blake: "Fair Elanor"
 William Blake: "I Askéd a Thief"
@@ -1493,6 +1554,7 @@ William Shakespeare: Sonnet 153
 William Shakespeare: Sonnet 154
 William Shakespeare, "Tell Me Where Is Fancy Bred" [from The Merchant of Venice]
 William Shakespeare, "Under the Greenwood Tree" [from As You Like It]
+William Shakespeare: "Venus and Adonis"
 William Shakespeare: "When daisies pied" [from Love's Labours Lost]
 William Wordsworth: "A slumber did my spirit seal"
 William Wordsworth: "It Is a Beauteous Evening"
