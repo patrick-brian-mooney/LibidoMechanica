@@ -69,7 +69,8 @@ GPL, either version 3, or (at your option) any later version; see the file
 LICENSE.md for more details.
 """
 
-import bz2, datetime, functools, glob, json, os, pickle, pprint, random, re, string, sys
+
+import bz2, datetime, functools, glob, json, os, pickle, pprint, random, re, string, time, sys
 
 import pid                                              # https://pypi.python.org/pypi/pid/
 
@@ -202,7 +203,7 @@ def curlify_quotes(the_poem, straight_quote, opening_quote, closing_quote):
             if straight_quote == '"':
                 the_poem = the_poem[:index-1] + the_poem[index+1:]                  # Just strip it out.
             elif straight_quote == "'":
-                the_poem = the_poem[:index-1] + closing_quote + the+poem[index+1:]  # Make it an apostrophe.
+                the_poem = the_poem[:index-1] + closing_quote + the_poem[index+1:]  # Make it an apostrophe.
             else:
                 raise NotImplementedError                                           # We don't know how to deal with this quote.
     return the_poem
@@ -290,7 +291,7 @@ def fix_punctuation(the_poem):
     THE_POEM is a string, which is the text of the entire poem; the function
     returns a new, punctuation-fixed version of the poem passed in.
 
-    NOT YET FULLY IMPLEMENTED. What still needs to be done?
+    NOT YET FULLY IMPLEMENTED. (What still needs to be done?)
     """
     log_it("INFO: about to alter punctuation", 2)
     the_poem = strip_invalid_chars(the_poem)
@@ -450,20 +451,13 @@ class SimilarityCache(object):
                   }
              }
     """
-    class SilentError(Exception): pass
-
     def __init__(self, cache_file=similarity_cache_location):
         """Loads the existing cache into memory, if possible, or else returns an empty
         cache that will be modified and written out to disk after this run.
         """
         self.cache_file = cache_file
-        if not cache_file:
-            self.__del__ = lambda *args, **kwargs: None     # Ugh, a terrible hack ... #FIXME
         self.dirty = False
-        self.data, self.index = dict(), dict()
-
-    def __del__(self): pass
-        # self.flush_cache()
+        self.data = dict()
 
     def flush_cache(self):
         """Writes the textual similarity cache to disk, if self.dirty is True. If
@@ -488,6 +482,9 @@ class SimilarityCache(object):
         if not self.dirty:
             log_it("Skipping cache update: no changes made!")
             return
+        if not self.cache_file:
+            self.dirty = False
+            return
 
         log_it("Updating similarity data cache on disk ...", 3)
         try:
@@ -496,11 +493,10 @@ class SimilarityCache(object):
         except (OSError, EOFError, pickle.PicklingError):
             old = SimilarityCache(cache_file=None)
         old.data.update(self.data)
-        old.index.update(self.index)
-        self.data, self.index = old.data, old.index
+        self.data = old.data
         with bz2.open(similarity_cache_location, 'wb') as cache_file:
             pickle.dump(self, cache_file, protocol=pickle.HIGHEST_PROTOCOL)
-        log_it("... updated!", 3)
+        log_it(" ... updated!", 3)
         self.dirty = False
 
     @staticmethod
@@ -512,31 +508,6 @@ class SimilarityCache(object):
         for which_chain in one.keys():
             if which_chain in two: overlap_count += 1
         return overlap_count / len(one)
-
-    def _get_ID(self, the_file):
-        """Given a full path to a file, return the internal ID number used for the
-        file. If there is no ID assigned to the file yet, assign a new ID number and
-        return it. (This marks the cache as "dirty" and in need of on-disk updating.)
-
-        This function makes absolutely no attempt to deal with the fact that multiple
-        paths can resolve to the same "real file" on disk (e.g., because of symbolic
-        links in the path). During normal use, though, this should never be a problem,
-        because we should always be using the path to the texts that is specified in
-        the config constants above. If those ever change, though, the cache will
-        probably need to be cleaned and/or rebuilt manually.
-        """
-        if the_file in self.index:
-            return self.index[the_file]
-        else:
-            try:
-                new_index = 1 + max(self.index.values())
-            except ValueError:
-                new_index = 1 + len(self.index)
-            while new_index in self.index.values():
-                new_index += 1
-            self.index[the_file] = new_index
-            self.dirty = True
-            return new_index
 
     def calculate_similarity(self, one, two, markov_length=5):
         """Come up with a score evaluating how similar the two texts are to each other.
@@ -556,7 +527,9 @@ class SimilarityCache(object):
         chains_one = get_mappings(one, markov_length)
         chains_two = get_mappings(two, markov_length)
         ret = self.calculate_overlap(chains_one, chains_two) * self.calculate_overlap(chains_two, chains_one)
-        self.data[tuple(sorted([self._get_ID(one), self._get_ID(two)]))] = {'when': datetime.datetime.now(), 'similarity': ret}
+        self.data[tuple(sorted([os.path.basename(one), os.path.basename(two)]))] = {'when': time.time(),
+                                                                                    'similarity': ret,
+                                                                                    }
         self.dirty = True
         return ret
 
@@ -575,17 +548,20 @@ class SimilarityCache(object):
         Note that calculate_similarity() itself stores the results of the function. This
         function only takes advantage of the stored values.
         """
-        index = tuple(sorted([self._get_ID(one), self._get_ID(two)]))
+        # Index in lexicographical order, by actual filename, after dropping path
+        index = tuple(sorted([os.path.basename(one), os.path.basename(two)]))
         log_it("get_similarity() called for files: %s" % list(index), 5)
+
         if index in self.data:                   # If it's in the cache, and the data isn't stale ...
-            if self.data[index]['when'] < datetime.datetime.fromtimestamp(os.path.getmtime(one)):
+            if self.data[index]['when'] < os.path.getmtime(one):
                 log_it("  ... but cached data is stale relative to %s !" % one, 6)
                 return self.calculate_similarity(one, two)
-            if self.data[index]['when'] < datetime.datetime.fromtimestamp(os.path.getmtime(two)):
+            if self.data[index]['when'] < os.path.getmtime(two):
                 log_it("  ... but cached data is stale relative to %s !" % two, 6)
                 return self.calculate_similarity(one, two)
             log_it(" ... returning cached value!", 6)
             return self.data[index]['similarity']
+
         log_it(" ... not found in cache! Calculating and cacheing ...", 6)
         return self.calculate_similarity(one, two)
 
@@ -596,11 +572,11 @@ class SimilarityCache(object):
         Never called by the main processing loop, but available for manual maintenance.
         """
         try:
-            for count, i in enumerate(glob.glob(os.path.join(poetry_corpus, '*'))):
-                if count % 20 == 0:
-                    log_it("We've run full comparisons for %d source texts." % count)
+            for count, i in enumerate(sorted(glob.glob(os.path.join(poetry_corpus, '*')))):
+                if count % 10 == 0:
+                    log_it("It's %s, and we've run full comparisons for %d source texts." % (datetime.datetime.now(), count))
                     if count: self.flush_cache()
-                for j in glob.glob(os.path.join(poetry_corpus, '*')):
+                for subcount, j in enumerate(sorted(glob.glob(os.path.join(poetry_corpus, '*')))):
                     try:
                         _ = self.get_similarity(i, j)
                     except Exception as e:
@@ -611,15 +587,6 @@ class SimilarityCache(object):
                         log_it("    " + str(e))
         finally:
             self.flush_cache()
-
-    def _name_from_ID(self, id):
-        """Given an ID number for a file, returns the filename. Returns None if we have
-        no such ID number.
-        """
-        try:
-            return [f for f in self.index if self.index[f]==id][0]
-        except (IndexError,):
-            return None
 
     def clean_cache(self):
         """Goes through the cache, finding invalid entries and removing them. "Invalid"
@@ -670,11 +637,11 @@ try:
         log_it("Loading cached similarity data ...", 3)
         similarity_cache = pickle.load(cache_file)
 except (OSError, EOFError, AttributeError, pickle.PicklingError) as err:
-    log_it("WARNING! Unable to load cached similarity data. Preparing empty cache ...")
+    log_it("WARNING! Unable to load cached similarity data because %s. Preparing empty cache ..." % err)
     similarity_cache = SimilarityCache()
 
 
-oldmethod = False               # Set to True when tweaking the newer method to use the old method as a fallback.
+oldmethod = True               # Set to True when tweaking the newer method to use the old method as a fallback.
 def get_source_texts():
     """Return a list of partially random selected texts to serve as the source texts
     for the poem we're writing. The current method for
@@ -684,6 +651,7 @@ def get_source_texts():
     available = [f for f in glob.glob(poetry_corpus + '/*') if not os.path.isdir(f)]
     if oldmethod:
         log_it(" ... according to the old (pure random choice) method")
+        the_tags += ['old textual selection method']
         return random.sample(available, random.randint(150, 600))
     else:
         ret = random.sample(available, random.randint(3, 7))   # Seed the pot with several random source texts.
@@ -711,7 +679,6 @@ def get_source_texts():
             if candidates % 25 == 0:
                 log_it("  ... %d selected texts in %d candidates" % (len(ret), candidates), 3)
         the_tags += ["rejected training texts: %d" % (candidates - len(ret))]
-        log_it("  ... selected %d texts" % len(ret), 2)
         similarity_cache.flush_cache()
         return ret
 
@@ -720,9 +687,10 @@ def main():
     global similarity_cache, the_tags, genny
 
     sample_texts = get_source_texts()
+    log_it(" ... selected %d texts" % len(sample_texts), 2)
 
     # Next, set up the basic parameters for the run
-    chain_length = round(min(max(random.normalvariate(7, 3), 3), 10))
+    chain_length = round(min(max(random.normalvariate(5, 3), 3), 10))
 
     # And add their names to the list of tags, plus track sources of this particular poem
     source_texts = [ th.remove_prefix(os.path.basename(t), "Link to ").strip() for t in sample_texts ]
@@ -732,7 +700,7 @@ def main():
 
     log_it("INFO: about to set up and train text generator ...")
     genny = pg.PoemGenerator(name='Libido Mechanica generator', training_texts=sample_texts, markov_length=chain_length)
-    log_it("...trained!")
+    log_it(" ...trained!")
 
     log_it("INFO: about to generate poem ...")
     raw_poem = genny.gen_text(sentences_desired=poem_length, paragraph_break_probability=0.2)
@@ -779,7 +747,7 @@ def main():
     log_it("INFO: We're done")
 
 
-force_cache_update = True
+force_cache_update = False
 if force_cache_update:
     # similarity_cache.clean_cache()
     similarity_cache.build_cache()
