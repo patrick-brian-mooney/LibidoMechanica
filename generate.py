@@ -435,6 +435,7 @@ def do_final_cleaning(the_poem):
     return regularize_form(the_poem)
 
 
+@functools.lru_cache(maxsize=16)
 def get_mappings(f, markov_length):
     """Trains a generator, then returns the calculated mappings."""
     log_it("get_mappings() called for file %s" % f, 5)
@@ -460,7 +461,7 @@ class SimilarityCache(object):
             log_it("WARNING! Unable to load cached similarity data because %s. Preparing empty cache ..." % err)
             self._data = dict()
         self._dirty = False
-        self._cache_file = cache_file       # Make sure this is up to date
+        self._cache_file = cache_file
 
     def __str__(self):
         try:
@@ -482,11 +483,17 @@ class SimilarityCache(object):
         running, each of which thinks it has the "master copy" in memory. To help
         ameliorate the potential for race conditions, we update instead of overwriting.
 
-        #FIXME: That's not a perfect solution: We should be locking or at least using
-        exclusive-opening on the cache in addition to updating the cache itself, but
-        it's probably good enough most of the time. Anyway, this is a cache: worst case
-        scenario is that we delete it manually and no longer have memoization data for
-        these comparatively slow calculations. Oh well, it'll be recalculated.
+        #FIXME: This function does not do any file locking; there's nothing preventing
+        multiple attempts to update the cache at the same time. The convention for
+        reducing this problem is that any code, before calling flush_cache(), must
+        acquire the same PidFile lock that the main script acquires before calling the
+        code. The main script of course does this for the entire length of its run,
+        monopolizing the cache for long periods of time. That's OK: the cache is
+        primarily intended for the benefit of the main script; in any case, most of the
+        time that the main script is running, it's using the cache directly. Other code
+        that needs to write to the cache from outside of the main processing loop needs
+        to repeatedly attempt to acquire the lock, waiting in between failed attempts,
+        until it is able to do so. See .build_cache() for an example.
 
         In fact, we should be using some sort of real database-like thing, because the
         overhead of keeping all this data in memory could in theory grow quite large.
@@ -509,6 +516,13 @@ class SimilarityCache(object):
         log_it(" ... updated!", 3)
         self._dirty = False
 
+        updated = False
+        while not updated:
+            try:
+                with pid.PidFile(piddir=home_dir): pass
+            except pid.PidFileError:
+                time.sleep(15)
+
     @staticmethod
     def calculate_overlap(one, two):
         """return the percentage of chains in dictionary ONE that are also in
@@ -527,9 +541,8 @@ class SimilarityCache(object):
         length MARKOV_LENGTH constructed from text TWO that are also in chains
         constructed from text ONE.
 
-        This routine also caches the calculated result in the global similarity
-        cache. It's a comparatively expensive calculation to make, so if we
-        store the results.
+        This routine also caches the calculated result in the global similarity cache.
+        It's a comparatively expensive calculation to make, so we store the results.
         """
         log_it("calculate_similarity() called for: %s" % [one, two], 5)
         chains_one = get_mappings(one, markov_length)
@@ -572,11 +585,22 @@ class SimilarityCache(object):
         return self.calculate_similarity(one, two)
 
     def build_cache(self):
+        """Sequentially go through, text by text, forcing comparisons to all other texts
+        and cacheing the results, to make sure the cache is fully populated.
+
+        This method takes a VERY long time to run if starting from an empty cache with
+        many source texts in the corpus.
+        """
         log_it("Building cache ...")
         for i, first_text in enumerate(sorted(glob.glob(os.path.join(poetry_corpus, '*')))):
             if i % 10 == 0:
                 log_it("  We've performed full calculations for %d texts!" % i)
-                self.flush_cache()
+                while self._dirty:
+                    try:
+                        with pid.PidFile(piddir=home_dir):
+                            self.flush_cache()                          # Note that success clears self._dirty.
+                    except pid.PidFileError:
+                        time.sleep(15)              # In use? Wait and try again.
             for j, second_text in enumerate(sorted(glob.glob(os.path.join(poetry_corpus, '*')))):
                 log_it("About to compare %s to %s ..." % (os.path.basename(first_text), os.path.basename(second_text)), 6)
                 _ = self.get_similarity(first_text, second_text)
@@ -585,7 +609,37 @@ class SimilarityCache(object):
 oldmethod = True               # Set to True when tweaking the newer method to use the old method as a fallback.
 def get_source_texts(similarity_cache):
     """Return a list of partially random selected texts to serve as the source texts
-    for the poem we're writing. The current method for
+    for the poem we're writing. There are currently two textual selection methods,
+    called "the old method" and "the new method."
+
+    The "old method" merely picks a set of texts at random from the corpus. It is
+    fast, but makes no attempt to select texts that are similar to each other. This
+    method of picking training texts often produces poems that "feel disjointed",
+    and that contain longer sections of continuous letters from a single source
+    text.
+
+    The "new method" for choosing source texts involves picking a small number of
+    seed texts completely at random, then going through and adding to this small
+    corpus by looking for "sufficiently similar" texts to texts already in the
+    corpus. "Similarity" is here defined as "having a comparatively high number
+    of overlapping chains" as the text it's being compared to. A text as similarity
+    1.0 when compared to itself, and similarity 0.0 when it is compared to a text
+    that generates no chains in common with it (something in a different script,
+    say). Typically, two poems in English chosen more or less at random will have a
+    similarity score in the range of .015 to .07 or so.
+
+    Given the initial seed set, then, each poem not already in the set is considered
+    sequentially. "Considered" here means that each poem in the already-selected
+    corpus is given a chance to "grab" the poem under consideration; the more
+    similar the two poems are, the more likely the already-in-the-corpus poem is to
+    "grab" the new poem. This process repeats until "there are enough" poems in the
+    training corpus.
+
+    This is a slow process: it can take several minutes even on my faster computer.
+    Because the similarity calculations are comparatively slow, but many of them
+    must be performed to choose a set of training poems, the results of the
+    similartiy calculations are stored in a persistent cache of similarity-
+    calculation reesults.
     """
     global the_tags
     log_it("Choosing source texts")
@@ -627,7 +681,7 @@ def get_source_texts(similarity_cache):
 @contextlib.contextmanager
 def open_cache():
     """A context manager that returns the persistent similarity cache and closes it,
-    updating it if necessary, when it's no longer being used.
+    updating it if necessary, when it's done being used.
     """
     similarity_cache = SimilarityCache()
     yield similarity_cache
@@ -642,7 +696,7 @@ def main():
     log_it(" ... selected %d texts" % len(sample_texts), 2)
 
     # Next, set up the basic parameters for the run
-    chain_length = round(min(max(random.normalvariate(5, 3), 3), 10))
+    chain_length = round(min(max(random.normalvariate(6, 1.5), 3), 10))
 
     # And add their names to the list of tags, plus track sources of this particular poem
     source_texts = [ th.remove_prefix(os.path.basename(t), "Link to ").strip() for t in sample_texts ]
@@ -651,7 +705,7 @@ def main():
     poem_length = round(min(max(random.normalvariate(10, 5), 4), 200))          # in SENTENCES. Not lines.
 
     log_it("INFO: about to set up and train text generator ...")
-    genny = pg.PoemGenerator(name='Libido Mechanica generator', training_texts=sample_texts, markov_length=chain_length)
+    genny = pg.PoemGenerator(name='Libido Mechanica poetry generator', training_texts=sample_texts, markov_length=chain_length)
     log_it(" ...trained!")
 
     log_it("INFO: about to generate poem ...")

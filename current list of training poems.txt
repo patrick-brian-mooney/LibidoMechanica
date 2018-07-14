@@ -24,6 +24,7 @@ Adrienne Rich: "Twenty-One Love Poems [Poem XVIII]"
 Adrienne Rich: "Twenty-One Love Poems [Poem XX]"
 Adrienne Rich: "Twenty-One Love Poems [Poem XXI]"
 Adrienne Rich: "Twenty-One Love Poems [The Floating Poem, Unnumbered]"
+A.E. Housman, "When I Was One-And-Twenty"
 Aemilia Lanyer, "Eves Apologie" [from Salve Deus Rex Judæorum]
 Aemilia Lanyer, "To all vertuous Ladies in generall"
 A.E. Stallings, "Actaeon"
@@ -282,6 +283,37 @@ Edna St. Vincent Millay: "The Dream"
 Edna St. Vincent Millay, "The Spring and the Fall"
 Edna St. Vincent Millay, "Time does not bring relief; you all have lied"
 Edna St. Vincent Millay: "What lips my lips have kissed, and where, and why (Sonnet XLIII)"
+Edward FitzGerald: "Salámán and Absál 01"
+Edward FitzGerald: "Salámán and Absál 02"
+Edward FitzGerald: "Salámán and Absál 03"
+Edward FitzGerald: "Salámán and Absál 04"
+Edward FitzGerald: "Salámán and Absál 05"
+Edward FitzGerald: "Salámán and Absál 06"
+Edward FitzGerald: "Salámán and Absál 07"
+Edward FitzGerald: "Salámán and Absál 08"
+Edward FitzGerald: "Salámán and Absál 09"
+Edward FitzGerald: "Salámán and Absál 10"
+Edward FitzGerald: "Salámán and Absál 11"
+Edward FitzGerald: "Salámán and Absál 12"
+Edward FitzGerald: "Salámán and Absál 13"
+Edward FitzGerald: "Salámán and Absál 14"
+Edward FitzGerald: "Salámán and Absál 15"
+Edward FitzGerald: "Salámán and Absál 16"
+Edward FitzGerald: "Salámán and Absál 17"
+Edward FitzGerald: "Salámán and Absál 18"
+Edward FitzGerald: "Salámán and Absál 19"
+Edward FitzGerald: "Salámán and Absál 20"
+Edward FitzGerald: "Salámán and Absál 21"
+Edward FitzGerald: "Salámán and Absál 22"
+Edward FitzGerald: "Salámán and Absál 23"
+Edward FitzGerald: "Salámán and Absál 24"
+Edward FitzGerald: "Salámán and Absál 25"
+Edward FitzGerald: "Salámán and Absál 26"
+Edward FitzGerald: "Salámán and Absál 27"
+Edward FitzGerald: "Salámán and Absál 28"
+Edward FitzGerald: "Salámán and Absál 29"
+Edward FitzGerald: "Salámán and Absál 30"
+Edward FitzGerald: "The Rubáiyát of Omar Khayyám"
 Edward Lear, "The Owl And The Pussy-Cat"
 Edwin Arlington Robinson: "Luke Havergal"
 e.e. cummings, "[i carry your heart with me(i carry it in]"
@@ -296,8 +328,54 @@ E. Ethelbert Miller: "The Ear is an Organ Made for Love"
 Elinor Wylie: "Valentine"
 Eliza Acton: "I Love Thee"
 Elizabeth Akers Allen: "Famous Love and Romance Poets"
+Elizabeth Barrett Browning: "A Musical Instrument"
 Elizabeth Barrett Browning, "Grief"
 Elizabeth Barrett Browning: "Love"
+Elizabeth Barrett Browning: "Mother and Poet"
+Elizabeth Barrett Browning, Sonnets from the Portuguese 01
+Elizabeth Barrett Browning, Sonnets from the Portuguese 02
+Elizabeth Barrett Browning, Sonnets from the Portuguese 03
+Elizabeth Barrett Browning, Sonnets from the Portuguese 04
+Elizabeth Barrett Browning, Sonnets from the Portuguese 05
+Elizabeth Barrett Browning, Sonnets from the Portuguese 06
+Elizabeth Barrett Browning, Sonnets from the Portuguese 07
+Elizabeth Barrett Browning, Sonnets from the Portuguese 08
+Elizabeth Barrett Browning, Sonnets from the Portuguese 09
+Elizabeth Barrett Browning, Sonnets from the Portuguese 10
+Elizabeth Barrett Browning, Sonnets from the Portuguese 11
+Elizabeth Barrett Browning, Sonnets from the Portuguese 12
+Elizabeth Barrett Browning, Sonnets from the Portuguese 13
+Elizabeth Barrett Browning, Sonnets from the Portuguese 14
+Elizabeth Barrett Browning, Sonnets from the Portuguese 15
+Elizabeth Barrett Browning, Sonnets from the Portuguese 16
+Elizabeth Barrett Browning, Sonnets from the Portuguese 17
+Elizabeth Barrett Browning, Sonnets from the Portuguese 18
+Elizabeth Barrett Browning, Sonnets from the Portuguese 19
+Elizabeth Barrett Browning, Sonnets from the Portuguese 20
+Elizabeth Barrett Browning, Sonnets from the Portuguese 21
+Elizabeth Barrett Browning, Sonnets from the Portuguese 22
+Elizabeth Barrett Browning, Sonnets from the Portuguese 23
+Elizabeth Barrett Browning, Sonnets from the Portuguese 24
+Elizabeth Barrett Browning, Sonnets from the Portuguese 25
+Elizabeth Barrett Browning, Sonnets from the Portuguese 26
+Elizabeth Barrett Browning, Sonnets from the Portuguese 27
+Elizabeth Barrett Browning, Sonnets from the Portuguese 28
+Elizabeth Barrett Browning, Sonnets from the Portuguese 29
+Elizabeth Barrett Browning, Sonnets from the Portuguese 30
+Elizabeth Barrett Browning, Sonnets from the Portuguese 31
+Elizabeth Barrett Browning, Sonnets from the Portuguese 32
+Elizabeth Barrett Browning, Sonnets from the Portuguese 33
+Elizabeth Barrett Browning, Sonnets from the Portuguese 34
+Elizabeth Barrett Browning, Sonnets from the Portuguese 35
+Elizabeth Barrett Browning, Sonnets from the Portuguese 36
+Elizabeth Barrett Browning, Sonnets from the Portuguese 37
+Elizabeth Barrett Browning, Sonnets from the Portuguese 38
+Elizabeth Barrett Browning, Sonnets from the Portuguese 39
+Elizabeth Barrett Browning, Sonnets from the Portuguese 40
+Elizabeth Barrett Browning, Sonnets from the Portuguese 41
+Elizabeth Barrett Browning, Sonnets from the Portuguese 42
+Elizabeth Barrett Browning, Sonnets from the Portuguese 43
+Elizabeth Barrett Browning, Sonnets from the Portuguese 44
 Elizabeth Bishop: "One Art"
 Ella Wheeler Wilcox, "I Love You"
 Ella Wheeler Wilcox, "Love's Coming"
@@ -331,6 +409,7 @@ Emily Dickinson, "I Taste a Liquor"
 Emily Dickinson: "It's all I have to bring today (26)"
 Emily Dickinson, "It's Such a Little Thing"
 Emily Dickinson, "My Friend Must Be a Bird"
+Emily Dickinson, "Proud of My Broken Heart"
 Emily Dickinson, "That I did always love"
 Emily Dickinson, "That it will never come again"
 Emily Dickinson, "To Lose Thee"
@@ -571,62 +650,57 @@ Laura Kasischke: "Daysleep"
 Leigh Hunt, "Jenny Kissed Me"
 Linda Gregg: "We Manage Most When We Manage Small"
 Linda Pastan: "I Married You"
-Link to A.E. Housman, "When I Was One-And-Twenty"
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 01
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 02
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 03
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 04
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 05
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 06
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 07
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 08
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 09
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 10
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 11
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 12
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 13
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 14
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 15
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 16
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 17
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 18
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 19
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 20
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 21
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 22
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 23
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 24
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 25
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 26
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 27
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 28
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 29
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 30
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 31
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 32
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 33
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 34
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 35
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 36
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 37
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 38
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 39
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 40
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 41
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 42
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 43
-Link to Elizabeth Barrett Browning, Sonnets from the Portuguese 44
-Link to Emily Dickinson, "Proud of My Broken Heart"
-Link to Thomas Hardy, "A Broken Appointment"
-Link to William Blake: "Broken Love"
 Lisa Ciccarello: "At night, by marriage"
 Lisa Olstein, "Dear One Absent This Long While"
 Lisa Olstein: "Where the Use of Cannon Is Impractical"
 Lola Ridge: "North Wind"
 Lord Alfred Douglas: "Two Loves"
+Lord Alfred Tennyson: "Break, Break, Break"
 Lord Alfred Tennyson: "from "The Princess""
+Lord Alfred Tennyson: "In Memoriam A.H.H."
+Lord Alfred Tennyson: "In the Valley of Cauteretz"
+Lord Alfred Tennyson: "Locksley Hall"
 Lord Alfred Tennyson: "Mariana"
 Lord Alfred Tennyson: "Marriage Morning"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.01"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.02"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.03"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.04"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.05"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.06"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.07"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.08"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.09"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.10"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.11"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.12"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.13"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.14"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.15"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.16"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.17"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.18"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.19"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.20"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.21"
+Lord Alfred Tennyson: "Maud; A Monodrama 1.22"
+Lord Alfred Tennyson: "Maud; A Monodrama 2.01"
+Lord Alfred Tennyson: "Maud; A Monodrama 2.02"
+Lord Alfred Tennyson: "Maud; A Monodrama 2.03"
+Lord Alfred Tennyson: "Maud; A Monodrama 2.04"
+Lord Alfred Tennyson: "Maud; A Monodrama 2.05"
+Lord Alfred Tennyson: "Maud; A Monodrama 3.06"
+Lord Alfred Tennyson: "The Lady of Shalott"
+Lord Alfred Tennyson: "The Princess 01"
+Lord Alfred Tennyson: "The Princess 02"
+Lord Alfred Tennyson: "The Princess 03"
+Lord Alfred Tennyson: "The Princess 04"
+Lord Alfred Tennyson: "The Princess 05"
+Lord Alfred Tennyson: "The Princess 06"
+Lord Alfred Tennyson: "The Princess 07"
+Lord Alfred Tennyson: "The Princess: Conclusion"
+Lord Alfred Tennyson: "The Princess: Prologue"
+Lord Alfred Tennyson: "Tithonus"
 Lorna Dee Cervantes, "Valentine"
 Louise Bogan: "After The Persian"
 Louise Bogan: "Juan's Song"
@@ -1311,6 +1385,7 @@ Thomas Carew: "A Rapture"
 Thomas Carew: "A Song"
 Thomas Ford, "There Is a Lady Sweet and Kind"
 Thomas Greaves: "Come Away, Come Away, Sweet Love"
+Thomas Hardy, "A Broken Appointment"
 Thomas Hardy, "Neutral Tones"
 Thomas Lovell Beddoes: "Song: ‘How many times do I love thee, dear?’"
 Thomas Lovell Beddoes: "The Phantom Wooer"
@@ -1358,6 +1433,7 @@ William Blake: "Ah! Sun-Flower"
 William Blake: "An Imitation of Spenser"
 William Blake: "A Poison Tree"
 William Blake: "Blind Mans Buff"
+William Blake: "Broken Love"
 William Blake: "Cradle Song"
 William Blake: "Fair Elanor"
 William Blake: "I Askéd a Thief"
