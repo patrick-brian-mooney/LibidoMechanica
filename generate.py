@@ -516,13 +516,6 @@ class SimilarityCache(object):
         log_it(" ... updated!", 3)
         self._dirty = False
 
-        updated = False
-        while not updated:
-            try:
-                with pid.PidFile(piddir=home_dir): pass
-            except pid.PidFileError:
-                time.sleep(15)
-
     @staticmethod
     def calculate_overlap(one, two):
         """return the percentage of chains in dictionary ONE that are also in
@@ -600,7 +593,7 @@ class SimilarityCache(object):
                         with pid.PidFile(piddir=home_dir):
                             self.flush_cache()                          # Note that success clears self._dirty.
                     except pid.PidFileError:
-                        time.sleep(15)              # In use? Wait and try again.
+                        time.sleep(5)                   # In use? Wait and try again.
             for j, second_text in enumerate(sorted(glob.glob(os.path.join(poetry_corpus, '*')))):
                 log_it("About to compare %s to %s ..." % (os.path.basename(first_text), os.path.basename(second_text)), 6)
                 _ = self.get_similarity(first_text, second_text)
