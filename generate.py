@@ -578,11 +578,23 @@ class SimilarityCache(object):
         return self.calculate_similarity(one, two)
 
     def build_cache(self):
-        """Sequentially go through, text by text, forcing comparisons to all other texts
-        and cacheing the results, to make sure the cache is fully populated.
+        """Sequentially go through the corpus, text by text, forcing comparisons to all
+        other texts and cacheing the results, to make sure the cache is fully
+        populated. Periodically, it dumps the results to disk by updating the on-disk
+        cache, so that not all of the calculation results are lost if the run is
+        interrupted. Note that "saves" are actually updates, because it's possible that
+        there are multiple instances of this script running -- say, one that is
+        intentionally running this function in an IDE, and another that's run
+        automatically as a CRON job to generate a poem, but which also winds up
+        calculating new similarity data that it also saves. Concurrent runs do not
+        share the in-memory copy of the cache, and the second ("generating") run
+        mentioned above may wind up duplicating the work of the first. Hence "update,"
+        above. The worst-case scenario here is a corrupted cache, which SHOULD be newly
+        created by script runs. Hopefully. In any case, if not, hey, it's just a cache.
 
         This method takes a VERY long time to run if starting from an empty cache with
-        many source texts in the corpus.
+        many source texts in the corpus. The cache CAN OF COURSE be allowed to
+        populate itself across multiple runs.
         """
         log_it("Building cache ...")
         for i, first_text in enumerate(sorted(glob.glob(os.path.join(poetry_corpus, '*')))):
@@ -597,6 +609,30 @@ class SimilarityCache(object):
             for j, second_text in enumerate(sorted(glob.glob(os.path.join(poetry_corpus, '*')))):
                 log_it("About to compare %s to %s ..." % (os.path.basename(first_text), os.path.basename(second_text)), 6)
                 _ = self.get_similarity(first_text, second_text)
+
+    def clean_cache(self):
+        """Run through the cache, checking for problems and fixing them. Work on a copy
+        of the data, then rebind the copy over the original data after cleaning is
+        done.
+        """
+        pruned = self._data.copy()
+        for count, (one, two) in enumerate(self._data):
+            try:
+                if count % 1000 == 0:
+                    log_it("We're on entry # %d: that's %d %% done!" % (count, (100 * count/len(self._data))))
+                assert os.path.isfile(os.path.join(poetry_corpus, one)), "'%s' does not exist!" % one
+                assert os.path.isfile(os.path.join(poetry_corpus, two)), "'%s' does not exist!" % two
+                assert self._data[(one, two)]['when'] >= os.path.getmtime(os.path.join(poetry_corpus, one)), "data for '%s' is stale!" % one
+                assert self._data[(one, two)]['when'] >= os.path.getmtime(os.path.join(poetry_corpus, two)), "data for '%s' is stale!" % two
+                _ = int(self._data[(one, two)]['when'])
+            except (AssertionError, ValueError, KeyError) as err:
+                log_it("Removing entry: (%s, %s)    -- because: %s" % (one, two, err))
+                del pruned[(one, two)]
+                self._dirty = True
+            except BaseException as err:
+                log_it("Unhandled error: %s! Leaving data in place" % err)
+        log_it("Removed %d entries; that's %d %%!" % (len(self._data - pruned), ((100 * len(self._data)-pruned)/len(self._data))))
+        self._data = pruned
 
 
 oldmethod = True               # Set to True when tweaking the newer method to use the old method as a fallback.
@@ -748,8 +784,9 @@ def main():
 
 force_cache_update = False
 if force_cache_update:
-    # similarity_cache.clean_cache()            #FIXME!
     with open_cache() as similarity_cache:
+        similarity_cache.clean_cache()
+        similarity_cache.flush_cache()
         similarity_cache.build_cache()
     sys.exit(0)
 
