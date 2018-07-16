@@ -89,10 +89,19 @@ import text_handling as th                              # From https://github.co
 
 patrick_logger.verbosity_level = 3
 
+
 home_dir = '/LibidoMechanica'
+
 poetry_corpus = os.path.join(home_dir, 'poetry_corpus')
+
 post_archives = os.path.join(home_dir, 'archives')
+
 similarity_cache_location = os.path.join(home_dir, 'similarity_cache.pkl.bz2')
+
+lock_file_dir = home_dir
+running_lock_name = 'running.pid'
+updating_lock_name = 'updating.pid'
+
 
 known_punctuation = string.punctuation + "‘’“”"
 
@@ -636,20 +645,20 @@ class SimilarityCache(object):
         log_it("Removed %d entries; that's %d %%!" % (removed, 100 * removed/len(self._data)))
         self._data = pruned
 
+def old_selection_method(available):
+    """This is the original selection method, which merely picks a set of texts at
+    random from the corpus. It is fast, but makes no attempt to select texts that
+    are similar to each other. This method of picking training texts often produces
+    poems that "feel disjointed" and that contain comparatively longer sections of
+    continuous letters from a single source text.
+    """
+    global the_tags
+    log_it(" ... according to the old (pure random choice) method")
+    the_tags += ['old textual selection method']
+    return random.sample(available, random.randint(150, 600))
 
-oldmethod = False               # Set to True when tweaking the newer method to use the old method as a fallback.
-def get_source_texts(similarity_cache):
-    """Return a list of partially random selected texts to serve as the source texts
-    for the poem we're writing. There are currently two textual selection methods,
-    called "the old method" and "the new method."
-
-    The "old method" merely picks a set of texts at random from the corpus. It is
-    fast, but makes no attempt to select texts that are similar to each other. This
-    method of picking training texts often produces poems that "feel disjointed"
-    and that contain comparatively longer sections of continuous letters from a
-    single source text.
-
-    The "new method" for choosing source texts involves picking a small number of
+def new_selection_method(available, similarity_cache):
+    """The "new method" for choosing source texts involves picking a small number of
     seed texts completely at random, then going through and adding to this small
     corpus by looking for "sufficiently similar" texts to texts already in the
     corpus. "Similarity" is here defined as "having a comparatively high number
@@ -672,41 +681,54 @@ def get_source_texts(similarity_cache):
     similartiy calculations are stored in a persistent cache of similarity-
     calculation reesults.
     """
+    ret = random.sample(available, random.randint(3, 7))  # Seed the pot with several random source texts.
+    for i in ret: available.remove(i)  # Make sure already-chosen texts are not chosen again.
+    done, candidates = False, 0
+    announced, last_count = set(), 0
+    while not done:
+        candidates += 1
+        if not available:
+            available = [f for f in glob.glob(os.path.join(poetry_corpus, '*')) if not os.path.isdir(f) and f not in ret]  # Refill the list of options if we've rejected them all.
+        current_choice = random.choice(available)
+        available.remove(current_choice)
+        changed = False
+        for i in ret:  # Give each already-chosen text a chance to "claim" the new one
+            if random.random() < (similarity_cache.get_similarity(i, current_choice) / len(ret)):
+                ret += [current_choice]
+                changed = True
+                break
+        if candidates > 10000 and len(ret) >= 75:
+            done = True
+        if candidates % 5 == 0:
+            log_it("    ... %d selection candidates" % candidates, 4)
+            if changed:
+                if (1 - random.random() ** 4.5) < ((len(ret) - 160) / 250):
+                    done = True
+        if candidates % 25 == 0:
+            if len(ret) > last_count:
+                log_it("  ... %d selected texts in %d candidates. New: %s" % (len(ret), candidates, set(ret) ^ announced), 3)
+                announced, last_count = set(ret), len(ret)
+            else:
+                log_it("  ... %d selected texts in %d candidates" % (len(ret), candidates), 3)
+    the_tags += ["rejected training texts: %d" % (candidates - len(ret))]
+    similarity_cache.flush_cache()
+    return ret
+
+
+oldmethod = False               # Set to True when tweaking the newer method to use the old method as a fallback.
+def get_source_texts(similarity_cache):
+    """Return a list of partially random selected texts to serve as the source texts
+    for the poem we're writing. There are currently two textual selection methods,
+    called "the old method" and "the new method." Each is documented in its own
+    function docstring.
+    """
     global the_tags
     log_it("Choosing source texts")
     available = [f for f in glob.glob(os.path.join(poetry_corpus, '*')) if not os.path.isdir(f)]
     if oldmethod:
-        log_it(" ... according to the old (pure random choice) method")
-        the_tags += ['old textual selection method']
-        return random.sample(available, random.randint(150, 600))
+        return old_selection_method(available)
     else:
-        ret = random.sample(available, random.randint(3, 7))   # Seed the pot with several random source texts.
-        for i in ret: ret.remove(i)                                 # Make sure already-chosen texts are not eligible to be chosen again.
-        done, candidates = False, 0
-        while not done:
-            candidates += 1
-            if not available:
-                available = [f for f in glob.glob(poetry_corpus + '/*') if not os.path.isdir(f) and f not in ret]    # Refill the list of options if we've rejected them all.
-            current_choice = random.choice(available)
-            available.remove(current_choice)
-            changed = False
-            for i in ret:            # Give each already-chosen text a chance to "claim" the new one
-                if random.random() < (similarity_cache.get_similarity(i, current_choice) / len(ret)):
-                    ret += [ current_choice ]
-                    changed = True
-                    break
-            if candidates > 10000 and len(ret) >= 75:
-                done = True
-            if candidates % 5 == 0:
-                log_it("    ... %d selection candidates" % candidates, 4)
-                if changed:
-                    if (1 - random.random() ** 4.5) < ((len(ret) - 160) / 250):
-                        done = True
-            if candidates % 25 == 0:
-                log_it("  ... %d selected texts in %d candidates" % (len(ret), candidates), 3)
-        the_tags += ["rejected training texts: %d" % (candidates - len(ret))]
-        similarity_cache.flush_cache()
-        return ret
+        return new_selection_method(available, similarity_cache)
 
 
 @contextlib.contextmanager
@@ -714,9 +736,16 @@ def open_cache():
     """A context manager that returns the persistent similarity cache and closes it,
     updating it if necessary, when it's done being used.
     """
-    similarity_cache = SimilarityCache()
-    yield similarity_cache
-    similarity_cache.flush_cache()
+    opened = False
+    while not opened:
+        try:
+            with pid.PidFile(piddir=lock_file_dir, pidname=updating_lock_name):
+                similarity_cache = SimilarityCache()
+                yield similarity_cache
+                opened = True
+                similarity_cache.flush_cache()
+        except pid.PidFileError:                        # Already in use? Wait and try again.
+            time.sleep(10)
 
 
 def main():
@@ -795,7 +824,7 @@ if force_cache_update:
 
 if __name__ == "__main__":
     try:
-        with pid.PidFile(piddir=home_dir):
+        with pid.PidFile(piddir=lock_file_dir, pidname=running_lock_name):
             main()
     except pid.PidFileError:
         log_it("Already running! Quitting ...", 0)
