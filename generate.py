@@ -435,7 +435,7 @@ def do_final_cleaning(the_poem):
     return regularize_form(the_poem)
 
 
-@functools.lru_cache(maxsize=16)
+@functools.lru_cache(maxsize=8)
 def get_mappings(f, markov_length):
     """Trains a generator, then returns the calculated mappings."""
     log_it("get_mappings() called for file %s" % f, 5)
@@ -622,6 +622,7 @@ class SimilarityCache(object):
                     log_it("We're on entry # %d: that's %d %% done!" % (count, (100 * count/len(self._data))))
                 assert os.path.isfile(os.path.join(poetry_corpus, one)), "'%s' does not exist!" % one
                 assert os.path.isfile(os.path.join(poetry_corpus, two)), "'%s' does not exist!" % two
+                assert one < two, "%s and %s are mis-ordered!" % (one, two)
                 assert self._data[(one, two)]['when'] >= os.path.getmtime(os.path.join(poetry_corpus, one)), "data for '%s' is stale!" % one
                 assert self._data[(one, two)]['when'] >= os.path.getmtime(os.path.join(poetry_corpus, two)), "data for '%s' is stale!" % two
                 _ = int(self._data[(one, two)]['when'])
@@ -631,11 +632,12 @@ class SimilarityCache(object):
                 self._dirty = True
             except BaseException as err:
                 log_it("Unhandled error: %s! Leaving data in place" % err)
-        log_it("Removed %d entries; that's %d %%!" % (len(self._data - pruned), ((100 * len(self._data)-pruned)/len(self._data))))
+        removed = len(self._data) - len(pruned)
+        log_it("Removed %d entries; that's %d %%!" % (removed, 100 * removed/len(self._data)))
         self._data = pruned
 
 
-oldmethod = True               # Set to True when tweaking the newer method to use the old method as a fallback.
+oldmethod = False               # Set to True when tweaking the newer method to use the old method as a fallback.
 def get_source_texts(similarity_cache):
     """Return a list of partially random selected texts to serve as the source texts
     for the poem we're writing. There are currently two textual selection methods,
@@ -643,9 +645,9 @@ def get_source_texts(similarity_cache):
 
     The "old method" merely picks a set of texts at random from the corpus. It is
     fast, but makes no attempt to select texts that are similar to each other. This
-    method of picking training texts often produces poems that "feel disjointed",
-    and that contain longer sections of continuous letters from a single source
-    text.
+    method of picking training texts often produces poems that "feel disjointed"
+    and that contain comparatively longer sections of continuous letters from a
+    single source text.
 
     The "new method" for choosing source texts involves picking a small number of
     seed texts completely at random, then going through and adding to this small
@@ -698,7 +700,7 @@ def get_source_texts(similarity_cache):
             if candidates % 5 == 0:
                 log_it("    ... %d selection candidates" % candidates, 4)
                 if changed:
-                    if (1 - random.random() ** 4.5) < ((len(ret) - 160) / 200):
+                    if (1 - random.random() ** 4.5) < ((len(ret) - 160) / 250):
                         done = True
             if candidates % 25 == 0:
                 log_it("  ... %d selected texts in %d candidates" % (len(ret), candidates), 3)
