@@ -681,6 +681,7 @@ def new_selection_method(available, similarity_cache):
     similartiy calculations are stored in a persistent cache of similarity-
     calculation reesults.
     """
+    global the_tags    
     ret = random.sample(available, random.randint(3, 7))  # Seed the pot with several random source texts.
     for i in ret: available.remove(i)  # Make sure already-chosen texts are not chosen again.
     done, candidates = False, 0
@@ -706,7 +707,7 @@ def new_selection_method(available, similarity_cache):
                     done = True
         if candidates % 25 == 0:
             if len(ret) > last_count:
-                log_it("  ... %d selected texts in %d candidates. New: %s" % (len(ret), candidates, set(ret) ^ announced), 3)
+                log_it("  ... %d selected texts in %d candidates. New: %s" % (len(ret), candidates, {os.path.basename(f) for f in set(ret) ^ announced}), 3)
                 announced, last_count = set(ret), len(ret)
             else:
                 log_it("  ... %d selected texts in %d candidates" % (len(ret), candidates), 3)
