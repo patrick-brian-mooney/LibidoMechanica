@@ -141,7 +141,7 @@ def decapitalize_beginnings_of_lines(the_poem: List[str], poem_path: str) -> Lis
                 if th.is_capitalized(line):
                     if count == 0:                      # First line of a poem is the first line of a sentence. Capitalize it.
                         saves.add(count)
-                    elif (len(previous_textual_line) > 0) and (len(set(end_of_previous_line) & set(tg.sentence_ending_punct))):
+                    elif (previous_textual_line) and (len(set(end_of_previous_line) & set(tg.sentence_ending_punct))):
                         saves.add(count)    # If the previous line is not blank ... and there's sentence-ending punctuation after the last alphanumeric character on the previous line ...
                     elif line[th._find_first_alphanumeric(line):2 + th._find_first_alphanumeric(line)] == "I ": #FIXME: what about other whitespace?
                         saves.add(count)
@@ -151,7 +151,7 @@ def decapitalize_beginnings_of_lines(the_poem: List[str], poem_path: str) -> Lis
                 if line:
                     previous_textual_line = line
                     end_of_previous_line = previous_textual_line[1 + th._find_last_alphanumeric(previous_textual_line):]
-            log_it("  OK, I suggest keeping the following lines capitalized: %s\n" % sorted([i + 1 for i in saves]))
+            log_it("  OK, I suggest keeping the following %d lines capitalized: %s\n" % (len(saves), sorted([i + 1 for i in saves])))
             if not prompt_and_confirm("Accept this decision"):
                 if prompt_and_confirm("Re-enter manually"):
                     saves = set()           # User disagrees? Force manual entry
