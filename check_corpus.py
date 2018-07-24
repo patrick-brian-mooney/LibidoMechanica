@@ -185,6 +185,8 @@ def check_file(what_file: str) -> None:
     Makes a lot of assumptions, including the assumption that all text files are in
     the system default encoding.
     """
+    global tests_performed
+
     log_it("\n\nINFO: checking %s" % os.path.basename(what_file), 2)
     with open(what_file) as the_file:
         original_text = the_file.read()
@@ -207,6 +209,8 @@ def check_file(what_file: str) -> None:
         log_it("  INFO: file changed: %s. Saving ..." % os.path.basename(what_file), 1)
         with open(what_file, 'w') as the_file:
             the_file.write(the_text)
+
+    tests_performed[os.path.basename(what_file)]['time'] = time.time()       # We have verified data up to now. Reflect this.
 
 
 if __name__ == "__main__":
