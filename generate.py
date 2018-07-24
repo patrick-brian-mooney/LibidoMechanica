@@ -1,7 +1,23 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""This script creates the content at LibidoMechanica.tumblr.com, which is a
+"""generate.py creates the content at LibidoMechanica.tumblr.com, which is a
 blog consisting of automatically written "love poetry" created by this script.
+This program is copyright 2017-18 by Patrick Mooney.
+
+
+Usage:
+
+    ./generate.py [options]
+
+
+Options:
+
+    --help, -h      Print this help text, then exit.
+    --build, -b     Fully populate the textual similarity cache, then exit.
+    --clean, -c     Clean out stale data from the textual similarity cache,
+                    then exit.
+
+
 In a nutshell, this program "writes" these "love poems" by training a Markov
 chain-based text generator on a set of existing love poems (a phrase sometimes
 rather broadly interpreted) picked from a larger corpus of love and romance
@@ -55,9 +71,9 @@ calculations for all texts in the training corpus (and takes a REALLY LONG TIME
 to run if the cache has not already been populated); clean_cache() attempts to
 clean out erroneous, malformed, and stale data.
 
-This is very much a rough draft and a work in progress. Many of the sub-tasks
-that this script accomplishes are accomplished in hacky and suboptimal ways.
-There's plenty of room for improvement here.
+This whole script is very much a rough draft and a work in progress. Many of
+the sub-tasks that this script accomplishes are accomplished in hacky and
+suboptimal ways. There's plenty of room for improvement here.
 
 THIS SOFTWARE IS OFFERED WITHOUT WARRANTY OF ANY KIND AT ALL. It is ALPHA
 SOFTWARE; if you don't know what that means, or can't read the source code to
@@ -74,17 +90,19 @@ import bz2, contextlib, datetime, functools, glob, json, os, pickle, pprint, ran
 
 import pid                                              # https://pypi.python.org/pypi/pid/
 
-import patrick_logger                                   # From https://github.com/patrick-brian-mooney/personal-library
+from nltk.corpus import cmudict                         # nltk.org
+
+import patrick_logger                                   # https://github.com/patrick-brian-mooney/personal-library
 from patrick_logger import log_it
 
-import social_media                                     # From https://github.com/patrick-brian-mooney/personal-library
+import social_media                                     # https://github.com/patrick-brian-mooney/personal-library
 from social_media_auth import libidomechanica_client    # Unshared file that contains authentication constants
 
 import searcher                                         # https://github.com/patrick-brian-mooney/python-personal-library/blob/master/searcher.py
 
 import poetry_generator as pg                           # https://github.com/patrick-brian-mooney/markov-sentence-generator
 
-import text_handling as th                              # From https://github.com/patrick-brian-mooney/personal-library
+import text_handling as th                              # https://github.com/patrick-brian-mooney/personal-library
 
 
 patrick_logger.verbosity_level = 3
@@ -93,9 +111,7 @@ patrick_logger.verbosity_level = 3
 home_dir = '/LibidoMechanica'
 
 poetry_corpus = os.path.join(home_dir, 'poetry_corpus')
-
 post_archives = os.path.join(home_dir, 'archives')
-
 similarity_cache_location = os.path.join(home_dir, 'similarity_cache.pkl.bz2')
 
 lock_file_dir = home_dir
@@ -104,19 +120,109 @@ updating_lock_name = 'updating.pid'
 
 
 known_punctuation = string.punctuation + "‘’“”"
+syllable_dict = cmudict.dict()
 
 
-normalization_strategy, stanza_length = None, None
+normalization_strategy, stanza_length, syllabic_normalization_strategy = None, None, None
 
 the_tags = ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains']
 
 genny = None            # We'll reassign this soon enough. We want it to be defined in the global namespace, though.
 
 
-def print_usage():      # Note that, currently, nothing calls this.
-    """Print the docstring as a usage message to stdout"""
+def print_usage(exit_code=0):
+    """Print the docstring as a usage message to stdout, then quit with status code
+    EXIT_CODE.
+    """
     log_it("INFO: print_usage() was called")
     print(__doc__)
+    sys.exit(exit_code)
+
+
+def factors(n):
+    """Return a list of the factors of a number. Based on code at
+    < https://stackoverflow.com/a/6800214 >.
+    """
+    assert (int(n) == n and n > 1), "ERROR: factors() called on %s, which is not a positive integer" % n
+    return sorted(list(set(functools.reduce(list.__add__, ([i, n//i] for i in range(1, int(n**0.5) + 1) if n % i == 0)))))
+
+
+def manually_count_syllables(word):
+    """Based on https://datascience.stackexchange.com/a/24865."""
+    count = 0
+    vowels = 'aeiouy'
+    word = word.lower()
+    if len(word) == 0: return 0             # Naively assume that null words have no syllables.
+    if word[0] in vowels:
+        count +=1
+    for index in range(1,len(word)):
+        if word[index] in vowels and word[index-1] not in vowels:
+            count +=1
+    if word.endswith('e'):
+        count -= 1
+    if word.endswith('le'):
+        count+=1
+    if count == 0:
+        count +=1
+    return count
+
+def syllable_count(word):
+    """Do a reasonably good job of determining the number of syllables in WORD, a word
+    in English. Uses the CMU corpus if it contains the word, or a best-guess
+    approach otherwise. Based on https://stackoverflow.com/a/4103234.
+    """
+    w = ''.join([c for c in word if c.isalpha()])
+    try:
+        return sum([len(list(y for y in x if y[-1].isdigit())) for x in syllable_dict[w.lower()]])
+    except KeyError:
+        return manually_count_syllables(w)
+
+def regularize_line_length(the_poem):
+    """Tries to find a form that gives the poem a more or less regular syllables-per-
+    line pattern. This is another rough approximation, of course.
+
+    As it tries various strategies, it attempts to build a FORM list, which is
+    simply a list of syllable counts, line by line: so, [10, 10, 10, 10] describes
+    a poem with four ten-syllable lines.
+    """
+    global syllabic_normalization_strategy
+    
+    form = None
+    total_syllables = sum([syllable_count(word) for word in genny._token_list(the_poem, character_tokens=False)])
+    syllabic_factors = factors(total_syllables)
+    # First_attempt: is any of the factors a plausible line length?
+    single_line_counts = list(set(syllabic_factors) & set(range(6,17)))
+    if single_line_counts:
+        length = random.choice(single_line_counts)
+        form = [length] * (total_syllables // length)
+        syllabic_normalization_strategy = 'Regular line length: %d syllables' % length
+    # Other strategies go here.
+
+    if form:        # If we found a pattern, reformat the poem to conform (loosely) to it.
+        tokenized_poem = genny._token_list(the_poem, character_tokens=False)
+        working_copy = ''.join(list(the_poem))
+        lines, total_syllables = [][:], 0
+        current_line, move_to_end = '', [][:]
+        current_goal = form.pop(0)
+        while tokenized_poem:
+            current_token = tokenized_poem.pop(0)
+            current_token_with_context = working_copy[:working_copy.find(current_token) + len(current_token)]
+            if current_token_with_context.count('\n'):
+                move_to_end += ['\n'] * current_token_with_context.count('\n')
+                current_token_with_context = th.multi_replace(current_token_with_context, [['\n', ' ']])
+            working_copy = working_copy[len(current_token_with_context):]
+            current_line += current_token_with_context
+            total_syllables += syllable_count(current_token)
+            if total_syllables >= current_goal:         # We've (probably) hit a line break. Reset the things that need to be reset.
+                if not tokenized_poem or (syllable_count(tokenized_poem[0]) != 0):      # If there are zero-syllable tokens coming up, don't break yet.
+                    lines += [current_line + '\n' if not current_line.endswith('\n') else ""]
+                    current_line, move_to_end = '', [][:]
+                    try:
+                        current_goal += form.pop(0)
+                    except IndexError:                  # No more lines left? Just run to end of poem.
+                        current_goal += sum([syllable_count(word) for word in tokenized_poem])
+        the_poem = ''.join(lines)
+    return the_poem
 
 
 def count_previous_untitled_poems():
@@ -323,13 +429,6 @@ def do_basic_cleaning(the_poem):
     return the_poem
 
 
-def factors(n):
-    """Return a list of the factors of a number. Based on code at
-    < https://stackoverflow.com/a/6800214 >.
-    """
-    assert (int(n) == n and n > 1), "ERROR: factors() called on %s, which is not a positive integer" % n
-    return sorted(list(set(functools.reduce(list.__add__, ([i, n//i] for i in range(1, int(n**0.5) + 1) if n % i == 0)))))
-
 def is_prime(n):
     """Return True if N is prime, false otherwise. "Prime" is here defined specifically
     as "has fewer than three factors," which is not quite the same as mathematical
@@ -393,12 +492,8 @@ def regularize_stanza_length(the_poem):
         the_poem += '\n'                                        # Add stanza break
     return the_poem
 
-def regularize_form(the_poem):
-    """Choose one of several strategies to regularize the form of the poem. Note that
-    one of these strategies is 'do nothing'.
-    """
-    global normalization_strategy
-    possible_strategies = [
+
+possible_strategies = [
         ('regular stanza length', lambda x: regularize_stanza_length(x)),
         ('regular stanza length', lambda x: regularize_stanza_length(x)),
         ('regular stanza length', lambda x: regularize_stanza_length(x)),
@@ -409,8 +504,15 @@ def regularize_form(the_poem):
         ('remove single lines (strict)', lambda x: remove_single_lines(x, combination_probability=1)),
         ('remove single lines (lax)', lambda x: remove_single_lines(x, combination_probability=0.8)),
         ('remove single lines (lax)', lambda x: remove_single_lines(x, combination_probability=0.8)),
-
     ]
+
+def regularize_form(the_poem):
+    """Choose one of several strategies to regularize the form of the poem. Note that
+    one of these strategies is 'do nothing'.
+    """
+    the_poem = regularize_line_length(the_poem)
+
+    global normalization_strategy
     normalization_strategy, normalization_procedure = random.choice(possible_strategies)
     log_it("INFO: form normalization strategy is: %s" % normalization_strategy, 2)
     return normalization_procedure(the_poem)
@@ -480,11 +582,11 @@ class SimilarityCache(object):
         except BaseException as err:
             return "< Textual Similarity Cache (unknown state because %s) >" % err
 
-    def flush_cache(self):              #FIXME!
+    def flush_cache(self):
         """Writes the textual similarity cache to disk, if self._dirty is True. If
-        self._dirty is False, it returns without doing anything.
+        self._dirty is False, it silently returns without doing anything.
 
-        Or, rather, that's the basic idea. In fact, what it does it reload the version
+        Or, rather, that's the basic idea. In fact, what it does is reload the version
         of the cache that's currently on disk and updates it with new info instead of
         replacing the one on disk. The reason for this, of course, is that this
         script has become complex enough that it may take more than an hour to run on
@@ -495,20 +597,16 @@ class SimilarityCache(object):
         #FIXME: This function does not do any file locking; there's nothing preventing
         multiple attempts to update the cache at the same time. The convention for
         reducing this problem is that any code, before calling flush_cache(), must
-        acquire the same PidFile lock that the main script acquires before calling the
-        code. The main script of course does this for the entire length of its run,
-        monopolizing the cache for long periods of time. That's OK: the cache is
-        primarily intended for the benefit of the main script; in any case, most of the
-        time that the main script is running, it's using the cache directly. Other code
-        that needs to write to the cache from outside of the main processing loop needs
-        to repeatedly attempt to acquire the lock, waiting in between failed attempts,
-        until it is able to do so. See .build_cache() for an example.
+        acquire a PidFile lock distinct from the one the main script acquires before
+        beginning its run. Code that needs to write to the cache needs to repeatedly
+        attempt to acquire this lock, waiting in between failed attempts, until it is
+        able to do so. See .build_cache() for an example.
 
         In fact, we should be using some sort of real database-like thing, because the
         overhead of keeping all this data in memory could in theory grow quite large.
         """
         if not self._dirty:
-            log_it("Skipping cache update: no changes made!")
+            log_it("Skipping cache update: no changes made!", 4)
             return
         log_it("Updating similarity data cache on disk ...", 3)
         try:
@@ -547,6 +645,8 @@ class SimilarityCache(object):
         It's a comparatively expensive calculation to make, so we store the results.
         """
         log_it("calculate_similarity() called for: %s" % [one, two], 5)
+        if one == two:
+            return 1                        # Well, that's easy.
         chains_one = get_mappings(one, markov_length)
         chains_two = get_mappings(two, markov_length)
         ret = self.calculate_overlap(chains_one, chains_two) * self.calculate_overlap(chains_two, chains_one)
@@ -609,12 +709,13 @@ class SimilarityCache(object):
         for i, first_text in enumerate(sorted(glob.glob(os.path.join(poetry_corpus, '*')))):
             if i % 10 == 0:
                 log_it("  We've performed full calculations for %d texts!" % i)
-                while self._dirty:
-                    try:
-                        with pid.PidFile(piddir=home_dir):
-                            self.flush_cache()                          # Note that success clears self._dirty.
-                    except pid.PidFileError:
-                        time.sleep(5)                   # In use? Wait and try again.
+                if i % 400 == 0:
+                    while self._dirty:
+                        try:
+                            with pid.PidFile(piddir=home_dir):
+                                self.flush_cache()                          # Note that success clears self._dirty.
+                        except pid.PidFileError:
+                            time.sleep(5)                   # In use? Wait and try again.
             for j, second_text in enumerate(sorted(glob.glob(os.path.join(poetry_corpus, '*')))):
                 log_it("About to compare %s to %s ..." % (os.path.basename(first_text), os.path.basename(second_text)), 6)
                 _ = self.get_similarity(first_text, second_text)
@@ -631,7 +732,7 @@ class SimilarityCache(object):
                     log_it("We're on entry # %d: that's %d %% done!" % (count, (100 * count/len(self._data))))
                 assert os.path.isfile(os.path.join(poetry_corpus, one)), "'%s' does not exist!" % one
                 assert os.path.isfile(os.path.join(poetry_corpus, two)), "'%s' does not exist!" % two
-                assert one < two, "%s and %s are mis-ordered!" % (one, two)
+                assert one <= two, "%s and %s are mis-ordered!" % (one, two)
                 assert self._data[(one, two)]['when'] >= os.path.getmtime(os.path.join(poetry_corpus, one)), "data for '%s' is stale!" % one
                 assert self._data[(one, two)]['when'] >= os.path.getmtime(os.path.join(poetry_corpus, two)), "data for '%s' is stale!" % two
                 _ = int(self._data[(one, two)]['when'])
@@ -644,6 +745,13 @@ class SimilarityCache(object):
         removed = len(self._data) - len(pruned)
         log_it("Removed %d entries; that's %d %%!" % (removed, 100 * removed/len(self._data)))
         self._data = pruned
+        # We're now going to flush the newly cleaned cache directly to disk. Note that
+        # we're not UPDATING THE CACHE using flush_cache(), because that would just
+        # allow stale old data that we just cleaned out to propagate back in.
+        with bz2.open(self._cache_file, 'wb') as pickled_file:
+            pickle.dump(self._data, pickled_file, protocol=pickle.HIGHEST_PROTOCOL)
+            self._dirty = False
+            log_it("Cache updated!")
 
 def old_selection_method(available):
     """This is the original selection method, which merely picks a set of texts at
@@ -655,7 +763,7 @@ def old_selection_method(available):
     global the_tags
     log_it(" ... according to the old (pure random choice) method")
     the_tags += ['old textual selection method']
-    return random.sample(available, random.randint(150, 600))
+    return random.sample(available, random.randint(60, 150))
 
 def new_selection_method(available, similarity_cache):
     """The "new method" for choosing source texts involves picking a small number of
@@ -678,10 +786,10 @@ def new_selection_method(available, similarity_cache):
     This is a slow process: it can take several minutes even on my faster computer.
     Because the similarity calculations are comparatively slow, but many of them
     must be performed to choose a set of training poems, the results of the
-    similartiy calculations are stored in a persistent cache of similarity-
-    calculation reesults.
+    similarity calculations are stored in a persistent cache of similarity-
+    calculation results.
     """
-    global the_tags    
+    global the_tags
     ret = random.sample(available, random.randint(3, 7))  # Seed the pot with several random source texts.
     for i in ret: available.remove(i)  # Make sure already-chosen texts are not chosen again.
     done, candidates = False, 0
@@ -689,7 +797,7 @@ def new_selection_method(available, similarity_cache):
     while not done:
         candidates += 1
         if not available:
-            available = [f for f in glob.glob(os.path.join(poetry_corpus, '*')) if not os.path.isdir(f) and f not in ret]  # Refill the list of options if we've rejected them all.
+            available = [f for f in glob.glob(os.path.join(poetry_corpus, '*')) if not os.path.isdir(f) and f not in ret]   # Refill the list of options if we've rejected them all.
         current_choice = random.choice(available)
         available.remove(current_choice)
         changed = False
@@ -712,13 +820,13 @@ def new_selection_method(available, similarity_cache):
             else:
                 log_it("  ... %d selected texts in %d candidates" % (len(ret), candidates), 3)
     the_tags += ["rejected training texts: %d" % (candidates - len(ret))]
-    similarity_cache.flush_cache()
+    if similarity_cache._dirty: similarity_cache.flush_cache()
     return ret
 
 
 oldmethod = False               # Set to True when tweaking the newer method to use the old method as a fallback.
 def get_source_texts(similarity_cache):
-    """Return a list of partially random selected texts to serve as the source texts
+    """Return a list of partially randomly selected texts to serve as the source texts
     for the poem we're writing. There are currently two textual selection methods,
     called "the old method" and "the new method." Each is documented in its own
     function docstring.
@@ -735,7 +843,9 @@ def get_source_texts(similarity_cache):
 @contextlib.contextmanager
 def open_cache():
     """A context manager that returns the persistent similarity cache and closes it,
-    updating it if necessary, when it's done being used.
+    updating it if necessary, when it's done being used. This function repeatedly
+    attempts to acquire exclusive access to the cache until it is successful at
+    doing so, checking the updating_lock_name lock until it can acquire it.
     """
     opened = False
     while not opened:
@@ -752,14 +862,17 @@ def open_cache():
 def main():
     global the_tags, genny
 
-    with open_cache() as similarity_cache:
-        sample_texts = get_source_texts(similarity_cache)
+    if not oldmethod:
+        with open_cache() as similarity_cache:
+            sample_texts = get_source_texts(similarity_cache)
+    else:
+        sample_texts = get_source_texts(None)
     log_it(" ... selected %d texts" % len(sample_texts), 2)
 
     # Next, set up the basic parameters for the run
-    chain_length = round(min(max(random.normalvariate(6, 1.5), 3), 10))
+    chain_length = round(min(max(random.normalvariate(6, 0.8), 3), 10))
 
-    # And add their names to the list of tags, plus track sources of this particular poem
+    # And track sources of this particular poem
     source_texts = [ th.remove_prefix(os.path.basename(t), "Link to ").strip() for t in sample_texts ]
     the_tags += ['Markov chain length: %d' % chain_length, '%d texts' % len(sample_texts) ]
 
@@ -808,22 +921,46 @@ def main():
     post_data['tags'], post_data['sources'] = the_tags, sorted(source_texts)
     post_data['status_code'], post_data['tumblr_data'] = the_status, the_tumblr_data
     post_data['normalization strategy'], post_data['stanza length'] = normalization_strategy, stanza_length
+    post_data['syllabic_normalization_strategy'] = syllabic_normalization_strategy
     archive_name = "%s — %s.json.bz2" % (post_data['time'], the_title)
     with bz2.BZ2File(os.path.join(post_archives, archive_name), mode='wb') as archive_file:
         archive_file.write(json.dumps(post_data, sort_keys=True, indent=3, ensure_ascii=False).encode())
     log_it("INFO: We're done")
 
 
-force_cache_update = False
-if force_cache_update:
+def clean_cache():
+    """Clean out the existing file similarity cache, then quit."""
     with open_cache() as similarity_cache:
         similarity_cache.clean_cache()
-        similarity_cache.flush_cache()
+    sys.exit(0)
+
+
+def build_cache():
+    """Clean out the existing file similarity cache, then make sure it's fully populated."""
+    with open_cache() as similarity_cache:
+        similarity_cache.clean_cache()
         similarity_cache.build_cache()
     sys.exit(0)
 
 
+force_cache_update = False                  # Set this to True when needing to step through these in an IDE.
+if force_cache_update:
+    build_cache()
+
+
 if __name__ == "__main__":
+    if len(sys.argv) == 2:
+        if sys.argv[1] in ['--help', '-h']:
+            print_usage()
+        elif sys.argv[1] in ['--clean', '-c']:
+            clean_cache()
+        elif sys.argv[1] in ['--build', '-b']:
+            build_cache()
+        else:
+            print_usage(1)
+    elif len(sys.argv) > 2:
+        print_usage(1)
+
     try:
         with pid.PidFile(piddir=lock_file_dir, pidname=running_lock_name):
             main()
