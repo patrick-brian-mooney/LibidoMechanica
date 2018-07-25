@@ -283,7 +283,7 @@ def regularize_line_length(the_poem):
                 form[count] += 1
                 form[count+1] -= 1
                 count += 2
-            syllabic_normalization_strategy += " (2-line terza rima with short middle line)"
+            syllabic_normalization_strategy += " (2-line ballad-like)"
 
         # Next, pay off any syllabic debt.
         if syllable_debt:
