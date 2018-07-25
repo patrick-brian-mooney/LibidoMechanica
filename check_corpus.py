@@ -205,14 +205,17 @@ def check_file(what_file: str) -> None:
     else:
         log_it("    Skipping check for beginning-of-line capitalization: already performed!", 5)
 
+    if check_test_performed(what_file, "file ends with one newline"):
+        tests_performed[os.path.basename(what_file)]['tests'].discard("file ends with one newline")
+
     # Now, whole-text tests.
     the_text = '\n'.join(the_text)
-    if not check_test_performed(what_file, "file ends with one newline"):
-        if not the_text.endswith('\n'):
+    if not check_test_performed(what_file, "file ends with two newlines"):
+        while not the_text.endswith('\n\n'):
             the_text += "\n"
-        while the_text.endswith('\n\n'):
+        while the_text.endswith('\n\n\n'):
             the_text = the_text[:-1]
-        set_test_performed(what_file, "file ends with one newline")
+        set_test_performed(what_file, "file ends with two newlines")
     else:
         log_it("    Skipping check for single end newline: already performed!", 5)
 

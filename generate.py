@@ -177,7 +177,28 @@ def syllable_count(word):
     except KeyError:
         return manually_count_syllables(w)
 
-def regularize_line_length(the_poem):
+
+def remove_single_lines(the_poem, combination_probability=0.85):
+    """Takes the poem passed as THE_POEM and goes through it, (randomly) eliminating
+    single-line stanzas. Returns the modified poem.
+    """
+    stanzas = [l.split('\n') for l in the_poem.split('\n\n')]   # A list of stanzas, each of which is a list of lines
+    i = 0
+    while i < len(stanzas):
+        if len(stanzas[i]) < 3:
+            try:                                # Combine it with the next stanza. Probably.
+                if random.random() <= combination_probability:
+                    next_stanza = stanzas.pop(i+1)
+                    stanzas[i] += next_stanza
+                else: i += 1
+            except IndexError:                  # If there is no next stanza ...
+                if len(stanzas) > 1:            # ... add this stanza to the end of the previous stanza.
+                    stanzas[-2] += stanzas.pop()
+        else:
+            i += 1
+    return '\n\n'.join(['\n'.join(s) for s in stanzas])
+
+def regularize_form(the_poem):
     """Tries to find a form that gives THE_POEM a more or less regular syllables-per-
     line pattern. This is another rough approximation, of course.
 
@@ -185,7 +206,7 @@ def regularize_line_length(the_poem):
     simply a list of syllable counts, line by line: so, [10, 10, 10, 10] describes
     a poem with four ten-syllable lines.
     """
-    global syllabic_normalization_strategy
+    global normalization_strategy, syllabic_normalization_strategy, stanza_length
     form = None
     syllable_debt = 0
     total_syllables = sum([syllable_count(word) for word in genny._token_list(the_poem, character_tokens=False)])
@@ -211,8 +232,8 @@ def regularize_line_length(the_poem):
                 form = [length] * ((total_syllables + syllable_debt) // length)
                 syllabic_normalization_strategy = 'Regular line length: %d syllables, with syllabic debt of %d' % (length, syllable_debt)
 
+    # First, vary the form planned, as appropriate. Once again, much more work needed here.
     if form:        # If we found a pattern, reformat the poem to conform (loosely) to it.
-        # First, vary the form planned as appropriate. Once again, much more work needed here.
         count = 0
         if (len(form) % 4 == 0) and (random.random() < 0.4):
             while count < len(form):
@@ -292,13 +313,12 @@ def regularize_line_length(the_poem):
         tokenized_poem = genny._token_list(the_poem, character_tokens=False)
         working_copy = ''.join(list(the_poem))
         lines, total_syllables = [][:], 0
-        current_line, move_to_end = '', [][:]
+        current_line = ''
         current_goal = form.pop(0)
         while tokenized_poem:
             current_token = tokenized_poem.pop(0)
             current_token_with_context = working_copy[:working_copy.find(current_token) + len(current_token)]
             if current_token_with_context.count('\n'):
-                move_to_end += ['\n'] * current_token_with_context.count('\n')
                 current_token_with_context = th.multi_replace(current_token_with_context, [['\n', ' ']])
             working_copy = working_copy[len(current_token_with_context):]
             current_line += current_token_with_context
@@ -306,12 +326,44 @@ def regularize_line_length(the_poem):
             if total_syllables >= current_goal:         # We've (probably) hit a line break. Reset the things that need to be reset.
                 if not tokenized_poem or (syllable_count(tokenized_poem[0]) != 0):      # If there are zero-syllable tokens coming up, don't break yet.
                     lines += [current_line + '\n' if not current_line.endswith('\n') else ""]
-                    current_line, move_to_end = '', [][:]
+                    current_line = ''
                     try:
                         current_goal += form.pop(0)
                     except IndexError:                  # No more lines left? Just run to end of poem.
                         current_goal += sum([syllable_count(word) for word in tokenized_poem])
         the_poem = ''.join(lines)
+
+    # OK, now that we've syllabified and rearranged lines, we modify the overall stanza form of the poem.
+    textual_lines = lines_without_stanza_breaks(the_poem)
+    if (not is_prime(len(textual_lines))) and (random.random() < 0.8):
+        normalization_strategy = 'regular stanza length'
+        possible_stanza_lengths = factors(len(textual_lines))
+        if len([x for x in possible_stanza_lengths if x >= 3]):     # If possible, prefer stanzas at least as long as Dante's in the Divine Comedy.
+            possible_stanza_lengths = [x for x in possible_stanza_lengths if x >= 3]
+        if len([x for x in possible_stanza_lengths if x <= 16]):    # If possible, choose a stanza length no longer than Meredith's extended sonnets in /Modern Love/.
+            possible_stanza_lengths = [x for x in possible_stanza_lengths if x <= 16]
+        stanza_length = random.choice(possible_stanza_lengths)
+        if stanza_length == 1:
+            stanza_length = len(textual_lines)      # 1 long stanza, not many one-line stanzas
+        the_poem = ""
+        for stanza in range(0, len(textual_lines) // stanza_length):  # Iterate over the appropriate # of stanzas
+            for line in range(0, stanza_length):
+                the_poem += "%s\n" % textual_lines.pop(0)
+            the_poem += '\n'  # Add stanza break
+    elif (not the_poem.count('\n\n')) and (random.random()) < 0.85:
+        normalization_strategy = 're-introduce random stanza breaks'
+        poem_lines = the_poem.split('\n')
+        for i in range(0, 1 + random.randint(1, len(textual_lines) // 3)):
+            poem_lines[random.randint(0, len(poem_lines)-1)] += '\n'
+        the_poem = '\n'.join(poem_lines)
+    elif random.random() < 0.8:
+        normalization_strategy = 'remove single lines (strict)'
+        the_poem = remove_single_lines(the_poem, combination_probability=1)
+    elif random.random() < 0.8:
+        normalization_strategy = 'remove single lines (lax)'
+        the_poem = remove_single_lines(the_poem, combination_probability=0.8)
+    else:
+        normalization_strategy = None
     return the_poem
 
 
@@ -536,76 +588,6 @@ def lines_without_stanza_breaks(the_poem):
 def total_lines(the_poem):
     """Returns the total number of non-empty lines in the poem."""
     return len(lines_without_stanza_breaks(the_poem))
-
-
-def remove_single_lines(the_poem, combination_probability=0.85):
-    """Takes the poem passed as THE_POEM and goes through it, (randomly) eliminating
-    single-line stanzas. Returns the modified poem.
-    """
-    stanzas = [l.split('\n') for l in the_poem.split('\n\n')]   # A list of stanzas, each of which is a list of lines
-    i = 0
-    while i < len(stanzas):
-        if len(stanzas[i]) < 3:
-            try:                                # Combine it with the next stanza. Probably.
-                if random.random() <= combination_probability:
-                    next_stanza = stanzas.pop(i+1)
-                    stanzas[i] += next_stanza
-                else: i += 1
-            except IndexError:                  # If there is no next stanza ...
-                if len(stanzas) > 1:            # ... add this stanza to the end of the previous stanza.
-                    stanzas[-2] += stanzas.pop()
-        else:
-            i += 1
-    return '\n\n'.join(['\n'.join(s) for s in stanzas])
-
-def regularize_stanza_length(the_poem):
-    """Reconfigures stanza breaks in THE_POEM so that it has stanzas of a regular
-    length. Returns the modified poem with regular stanzas. Tries to choose a
-    reasonable stanza length, but (if all else fails) will just produce one long
-    undivided poem.
-    """
-    global stanza_length
-    textual_lines = lines_without_stanza_breaks(the_poem)
-    num_lines = len(textual_lines)
-    # assert (not is_prime(num_lines)), "ERROR: regularize_stanza_length() called for poem with prime number of lines"
-    possible_stanza_lengths = factors(num_lines)
-    if len([x for x in possible_stanza_lengths if x >= 3]):     # If possible, prefer stanzas at least as long as Dante's in the Divine Comedy.
-        possible_stanza_lengths = [x for x in possible_stanza_lengths if x >= 3]
-    if len([x for x in possible_stanza_lengths if x <= 16]):    # If possible, choose a stanza length no longer than Meredith's extended sonnets in /Modern Love/.
-        possible_stanza_lengths = [x for x in possible_stanza_lengths if x <= 16]
-    stanza_length = random.choice(possible_stanza_lengths)
-    if stanza_length == 1: stanza_length = num_lines            # 1 long stanza, not many one-line stanzas
-    the_poem = ""
-    for stanza in range(0, num_lines // stanza_length):         # Iterate over the appropriate # of stanzas
-        for line in range(0, stanza_length):
-            the_poem += "%s\n" % textual_lines.pop(0)
-        the_poem += '\n'                                        # Add stanza break
-    return the_poem
-
-
-possible_strategies = [
-        ('regular stanza length', lambda x: regularize_stanza_length(x)),
-        ('regular stanza length', lambda x: regularize_stanza_length(x)),
-        ('regular stanza length', lambda x: regularize_stanza_length(x)),
-        ('regular stanza length', lambda x: regularize_stanza_length(x)),
-        (None, lambda x: x),
-        ('remove single lines (strict)', lambda x: remove_single_lines(x, combination_probability=1)),
-        ('remove single lines (strict)', lambda x: remove_single_lines(x, combination_probability=1)),
-        ('remove single lines (strict)', lambda x: remove_single_lines(x, combination_probability=1)),
-        ('remove single lines (lax)', lambda x: remove_single_lines(x, combination_probability=0.8)),
-        ('remove single lines (lax)', lambda x: remove_single_lines(x, combination_probability=0.8)),
-    ]
-
-def regularize_form(the_poem):
-    """Choose one of several strategies to regularize the form of the poem. Note that
-    one of these strategies is 'do nothing'.
-    """
-    the_poem = regularize_line_length(the_poem)
-
-    global normalization_strategy
-    normalization_strategy, normalization_procedure = random.choice(possible_strategies)
-    log_it("INFO: form normalization strategy is: %s" % normalization_strategy, 2)
-    return normalization_procedure(the_poem)
 
 
 def do_final_cleaning(the_poem):
@@ -914,7 +896,7 @@ def new_selection_method(available, similarity_cache):
     return ret
 
 
-oldmethod = False               # Set to True when tweaking the newer method to use the old method as a fallback.
+oldmethod = True               # Set to True when tweaking the newer method to use the old method as a fallback.
 def get_source_texts(similarity_cache):
     """Return a list of partially randomly selected texts to serve as the source texts
     for the poem we're writing. There are currently two textual selection methods,
