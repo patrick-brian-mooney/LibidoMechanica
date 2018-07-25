@@ -123,9 +123,12 @@ known_punctuation = string.punctuation + "‘’“”"
 syllable_dict = cmudict.dict()
 
 
-normalization_strategy, stanza_length, syllabic_normalization_strategy = None, None, None
-
-the_tags = ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains']
+# This next is a global dictionary holding data to be archived at the end of the run. Modified constantly.
+post_data = {'tags': ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains'],
+             'normalization_strategy': None,
+             'syllabic_normalization_strategy': None,
+             'stanza length': None,
+             }
 
 genny = None            # We'll reassign this soon enough. We want it to be defined in the global namespace, though.
 
@@ -206,7 +209,7 @@ def regularize_form(the_poem):
     simply a list of syllable counts, line by line: so, [10, 10, 10, 10] describes
     a poem with four ten-syllable lines.
     """
-    global normalization_strategy, syllabic_normalization_strategy, stanza_length
+    global post_data
     form = None
     syllable_debt = 0
     total_syllables = sum([syllable_count(word) for word in genny._token_list(the_poem, character_tokens=False)])
@@ -217,11 +220,11 @@ def regularize_form(the_poem):
     if single_line_counts and random.random() < 0.8:
         length = random.choice(single_line_counts)
         form = [length] * (total_syllables // length)
-        syllabic_normalization_strategy = 'Regular line length: %d syllables' % length
+        post_data['syllabic_normalization_strategy'] = 'Regular line length: %d syllables' % length
     elif random.random() < 0.4:
         length = total_syllables / the_poem.count('\n')
         form = [length] * the_poem.count('\n')
-        syllabic_normalization_strategy = 'Fractional regular line length, based on average: %.4g syllables' % length
+        post_data['syllabic_normalization_strategy'] = 'Fractional regular line length, based on average: %.4g syllables' % length
     elif random.random() < 0.7:
         while not form:
             syllable_debt += 1      # There's a good chance we've already tried, and failed, with zero.
@@ -230,7 +233,7 @@ def regularize_form(the_poem):
             if single_line_counts:
                 length = random.choice(single_line_counts)
                 form = [length] * ((total_syllables + syllable_debt) // length)
-                syllabic_normalization_strategy = 'Regular line length: %d syllables, with syllabic debt of %d' % (length, syllable_debt)
+                post_data['syllabic_normalization_strategy'] = 'Regular line length: %d syllables, with syllabic debt of %d' % (length, syllable_debt)
 
     # First, vary the form planned, as appropriate. Once again, much more work needed here.
     if form:        # If we found a pattern, reformat the poem to conform (loosely) to it.
@@ -241,7 +244,7 @@ def regularize_form(the_poem):
                 form[count+2] += 1
                 form[count+3] -= 2
                 count += 4
-            syllabic_normalization_strategy += " (4-line ballad-like with short last line)"
+            post_data['syllabic_normalization_strategy'] += " (4-line ballad-like with short last line)"
         elif (len(form) % 6 == 0) and (random.random() < 0.4):
             while count < len(form):
                 form[count]   += (4/3)
@@ -251,21 +254,21 @@ def regularize_form(the_poem):
                 form[count+4] += (4/3)
                 form[count+5] -= (8/3)
                 count += 6
-            syllabic_normalization_strategy += " (6-line Burns stanza-like)"
+            post_data['syllabic_normalization_strategy'] += " (6-line Burns stanza-like)"
         elif (len(form) % 3 == 0 and (random.random() < 0.333333)):
             while count < len(form):
                 form[count] -= 1
                 form[count+1] += 2
                 form[count+2] -= 1
                 count += 3
-            syllabic_normalization_strategy += " (3-line haiku-like)"
+            post_data['syllabic_normalization_strategy'] += " (3-line haiku-like)"
         elif (len(form) % 3 == 0 and (random.random() < 0.333333)):
             while count < len(form):
                 form[count] += 1
                 form[count+1] -= 2
                 form[count+2] += 1
                 count += 3
-            syllabic_normalization_strategy += " (3-line terza rima-like with short middle line)"
+            post_data['syllabic_normalization_strategy'] += " (3-line terza rima-like with short middle line)"
         elif (len(form) % 5 == 0) and (random.random() < 0.5):
             while count < len(form):
                 sign = 1 if syllable_debt <= 0 else -1
@@ -276,7 +279,7 @@ def regularize_form(the_poem):
                 form[count+4] += (1 * sign)
                 count += 5
                 syllable_debt += sign
-            syllabic_normalization_strategy += " (5-line alternating ballad with initial debt of %d)" % syllable_debt
+            post_data['syllabic_normalization_strategy'] += " (5-line alternating ballad with initial debt of %d)" % syllable_debt
         elif (len(form) % 5 == 0) and (random.random() < 0.15):
             while count < len(form):
                 form[count]   -= 2.4
@@ -285,7 +288,7 @@ def regularize_form(the_poem):
                 form[count+3] += 3.6
                 form[count+4] -= 2.4
                 count += 5
-            syllabic_normalization_strategy += " (cinquain-like)"
+            post_data['syllabic_normalization_strategy'] += " (cinquain-like)"
         elif (len(form) % 9 == 0) and (min(form) >= 6) and (random.random() < 0.4):
             while count < len(form):
                 form[count]   -= (32/9)
@@ -298,13 +301,13 @@ def regularize_form(the_poem):
                 form[count+7] -= (14/9)
                 form[count+8] -= (32/9)
                 count += 5
-            syllabic_normalization_strategy += " (richtameter-like)"
+            post_data['syllabic_normalization_strategy'] += " (richtameter-like)"
         elif (len(form) % 2 == 0) and (random.random() < 0.6):
             while count < len(form):
                 form[count] += 1
                 form[count+1] -= 1
                 count += 2
-            syllabic_normalization_strategy += " (2-line ballad-like)"
+            post_data['syllabic_normalization_strategy'] += " (2-line ballad-like)"
 
         # Next, pay off any syllabic debt.
         if syllable_debt:
@@ -336,34 +339,34 @@ def regularize_form(the_poem):
     # OK, now that we've syllabified and rearranged lines, we modify the overall stanza form of the poem.
     textual_lines = lines_without_stanza_breaks(the_poem)
     if (not is_prime(len(textual_lines))) and (random.random() < 0.8):
-        normalization_strategy = 'regular stanza length'
+        post_data['normalization strategy'] = 'regular stanza length'
         possible_stanza_lengths = factors(len(textual_lines))
         if len([x for x in possible_stanza_lengths if x >= 3]):     # If possible, prefer stanzas at least as long as Dante's in the Divine Comedy.
             possible_stanza_lengths = [x for x in possible_stanza_lengths if x >= 3]
         if len([x for x in possible_stanza_lengths if x <= 16]):    # If possible, choose a stanza length no longer than Meredith's extended sonnets in /Modern Love/.
             possible_stanza_lengths = [x for x in possible_stanza_lengths if x <= 16]
-        stanza_length = random.choice(possible_stanza_lengths)
-        if stanza_length == 1:
-            stanza_length = len(textual_lines)      # 1 long stanza, not many one-line stanzas
+        post_data['stanza length'] = random.choice(possible_stanza_lengths)
+        if post_data['stanza length'] == 1:
+            post_data['stanza length'] = len(textual_lines)      # 1 long stanza, not many one-line stanzas
         the_poem = ""
-        for stanza in range(0, len(textual_lines) // stanza_length):  # Iterate over the appropriate # of stanzas
-            for line in range(0, stanza_length):
+        for stanza in range(0, len(textual_lines) // post_data['stanza length']):  # Iterate over the appropriate # of stanzas
+            for line in range(0, post_data['stanza length']):
                 the_poem += "%s\n" % textual_lines.pop(0)
             the_poem += '\n'  # Add stanza break
     elif (not the_poem.count('\n\n')) and (random.random()) < 0.85:
-        normalization_strategy = 're-introduce random stanza breaks'
+        post_data['normalization strategy'] = 're-introduce random stanza breaks'
         poem_lines = the_poem.split('\n')
         for i in range(0, 1 + random.randint(1, len(textual_lines) // 3)):
             poem_lines[random.randint(0, len(poem_lines)-1)] += '\n'
         the_poem = '\n'.join(poem_lines)
     elif random.random() < 0.8:
-        normalization_strategy = 'remove single lines (strict)'
+        post_data['normalization strategy'] = 'remove single lines (strict)'
         the_poem = remove_single_lines(the_poem, combination_probability=1)
     elif random.random() < 0.8:
-        normalization_strategy = 'remove single lines (lax)'
+        post_data['normalization strategy'] = 'remove single lines (lax)'
         the_poem = remove_single_lines(the_poem, combination_probability=0.8)
     else:
-        normalization_strategy = None
+        post_data['normalization strategy'] = None
     return the_poem
 
 
@@ -832,9 +835,9 @@ def old_selection_method(available):
     poems that "feel disjointed" and that contain comparatively longer sections of
     continuous letters from a single source text.
     """
-    global the_tags
+    global post_data
     log_it(" ... according to the old (pure random choice) method")
-    the_tags += ['old textual selection method']
+    post_data['tags'] += ['old textual selection method']
     return random.sample(available, random.randint(100, 300))
 
 def new_selection_method(available, similarity_cache):
@@ -861,7 +864,7 @@ def new_selection_method(available, similarity_cache):
     similarity calculations are stored in a persistent cache of similarity-
     calculation results.
     """
-    global the_tags
+    global post_data
     ret = random.sample(available, random.randint(3, 7))  # Seed the pot with several random source texts.
     for i in ret: available.remove(i)  # Make sure already-chosen texts are not chosen again.
     done, candidates = False, 0
@@ -891,7 +894,7 @@ def new_selection_method(available, similarity_cache):
                 announced, last_count = set(ret), len(ret)
             else:
                 log_it("  ... %d selected texts in %d candidates" % (len(ret), candidates), 3)
-    the_tags += ["rejected training texts: %d" % (candidates - len(ret))]
+    post_data["rejected training texts"] =  candidates - len(ret)
     if similarity_cache._dirty: similarity_cache.flush_cache()
     return ret
 
@@ -903,7 +906,6 @@ def get_source_texts(similarity_cache):
     called "the old method" and "the new method." Each is documented in its own
     function docstring.
     """
-    global the_tags
     log_it("Choosing source texts")
     available = [f for f in glob.glob(os.path.join(poetry_corpus, '*')) if not os.path.isdir(f)]
     if oldmethod:
@@ -932,7 +934,7 @@ def open_cache():
 
 
 def main():
-    global the_tags, genny
+    global genny, post_data
 
     if not oldmethod:
         with open_cache() as similarity_cache:
@@ -946,7 +948,7 @@ def main():
 
     # And track sources of this particular poem
     source_texts = [ th.remove_prefix(os.path.basename(t), "Link to ").strip() for t in sample_texts ]
-    the_tags += ['Markov chain length: %d' % chain_length, '%d texts' % len(sample_texts) ]
+    post_data['tags'] += ['Markov chain length: %d' % chain_length, '%d texts' % len(sample_texts) ]
 
     poem_length = round(min(max(random.normalvariate(10, 5), 4), 200))          # in SENTENCES. Not lines.
 
@@ -957,11 +959,11 @@ def main():
     log_it("INFO: about to generate poem ...")
     raw_poem = genny.gen_text(sentences_desired=poem_length, paragraph_break_probability=0.2)
 
-    the_title = get_title(raw_poem)
+    post_data['title'] = get_title(raw_poem)
 
-    log_it("poem generated; title is: %s" % the_title)
+    log_it("poem generated; title is: %s" % post_data['title'])
     log_it("lines are: \n\n" + raw_poem)
-    log_it("tags are: %s" % the_tags)
+    log_it("tags are: %s" % post_data['tags'])
 
     log_it("INFO: cleaning poem up ...")
     the_poem = do_basic_cleaning(raw_poem)
@@ -981,20 +983,17 @@ def main():
     formatted_poem = th.multi_replace(formatted_poem, [['<p>\n', '\n<p>']])
     # Prevent all spaces from collapsing; get rid of spurious paragraphs
     formatted_poem = th.multi_replace(formatted_poem, [['<p></p>', ''], ['<p>\n</p>', '']])
-
     log_it('INFO: Attempting to post the content...')
-    the_status, the_tumblr_data = social_media.tumblr_text_post(libidomechanica_client, ', '.join(the_tags), the_title, formatted_poem)
+    the_status, the_tumblr_data = social_media.tumblr_text_post(libidomechanica_client, ', '.join(the_tags), post_data['title'], formatted_poem)
     log_it('INFO: the_status is: ' + pprint.pformat(the_status), 2)
     log_it('INFO: the_tumblr_data is: ' + pprint.pformat(the_tumblr_data), 3)
 
     log_it("INFO: archiving poem and metadata ...")
-    post_data = {'title': the_title, 'text': the_poem, 'time': datetime.datetime.now().isoformat() }
+    post_data['text'], post_data['time'] = the_poem, datetime.datetime.now().isoformat()
     post_data['raw_poem'], post_data['formatted_text'] = raw_poem, formatted_poem
-    post_data['tags'], post_data['sources'] = the_tags, sorted(source_texts)
+    post_data['sources'] = sorted(source_texts)
     post_data['status_code'], post_data['tumblr_data'] = the_status, the_tumblr_data
-    post_data['normalization strategy'], post_data['stanza length'] = normalization_strategy, stanza_length
-    post_data['syllabic_normalization_strategy'] = syllabic_normalization_strategy
-    archive_name = "%s — %s.json.bz2" % (post_data['time'], the_title)
+    archive_name = "%s — %s.json.bz2" % (post_data['time'], post_data['title'])
     with bz2.BZ2File(os.path.join(post_archives, archive_name), mode='wb') as archive_file:
         archive_file.write(json.dumps(post_data, sort_keys=True, indent=3, ensure_ascii=False).encode())
     log_it("INFO: We're done")
