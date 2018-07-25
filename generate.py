@@ -86,7 +86,7 @@ LICENSE.md for more details.
 """
 
 
-import bz2, contextlib, datetime, functools, glob, json, os, pickle, pprint, random, re, string, time, sys
+import bz2, contextlib, datetime, functools, glob, json, os, pickle, pprint, random, re, string, sys, time, unicodedata
 
 import pid                                              # https://pypi.python.org/pypi/pid/
 
@@ -150,8 +150,8 @@ def factors(n):
 def manually_count_syllables(word):
     """Based on https://datascience.stackexchange.com/a/24865."""
     count = 0
-    vowels = 'aeiouy'
-    word = word.lower()
+    vowels = 'aeæiouy'
+    word = unicodedata.normalize('NFKD', word.lower()).encode('ASCII', 'ignore').decode('ASCII')    # strip diacritics
     if len(word) == 0: return 0             # Naively assume that null words have no syllables.
     if word[0] in vowels:
         count +=1
@@ -178,7 +178,7 @@ def syllable_count(word):
         return manually_count_syllables(w)
 
 def regularize_line_length(the_poem):
-    """Tries to find a form that gives the poem a more or less regular syllables-per-
+    """Tries to find a form that gives THE_POEM a more or less regular syllables-per-
     line pattern. This is another rough approximation, of course.
 
     As it tries various strategies, it attempts to build a FORM list, which is
@@ -186,19 +186,109 @@ def regularize_line_length(the_poem):
     a poem with four ten-syllable lines.
     """
     global syllabic_normalization_strategy
-    
     form = None
+    syllable_debt = 0
     total_syllables = sum([syllable_count(word) for word in genny._token_list(the_poem, character_tokens=False)])
     syllabic_factors = factors(total_syllables)
+
     # First_attempt: is any of the factors a plausible line length?
-    single_line_counts = list(set(syllabic_factors) & set(range(6,17)))
-    if single_line_counts:
+    single_line_counts = list(set(syllabic_factors) & set(range(7, 17)))
+    if single_line_counts and random.random() < 0.8:
         length = random.choice(single_line_counts)
         form = [length] * (total_syllables // length)
         syllabic_normalization_strategy = 'Regular line length: %d syllables' % length
-    # Other strategies go here.
+    elif random.random() < 0.4:
+        length = total_syllables / the_poem.count('\n')
+        form = [length] * the_poem.count('\n')
+        syllabic_normalization_strategy = 'Fractional regular line length, based on average: %.4g syllables' % length
+    elif random.random() < 0.7:
+        while not form:
+            syllable_debt += 1      # There's a good chance we've already tried, and failed, with zero.
+            syllabic_factors = factors(syllable_debt + total_syllables)
+            single_line_counts = list(set(syllabic_factors) & set(range(7, 17)))
+            if single_line_counts:
+                length = random.choice(single_line_counts)
+                form = [length] * ((total_syllables + syllable_debt) // length)
+                syllabic_normalization_strategy = 'Regular line length: %d syllables, with syllabic debt of %d' % (length, syllable_debt)
 
     if form:        # If we found a pattern, reformat the poem to conform (loosely) to it.
+        # First, vary the form planned as appropriate. Once again, much more work needed here.
+        count = 0
+        if (len(form) % 4 == 0) and (random.random() < 0.4):
+            while count < len(form):
+                form[count] += 1
+                form[count+2] += 1
+                form[count+3] -= 2
+                count += 4
+            syllabic_normalization_strategy += " (4-line ballad-like with short last line)"
+        elif (len(form) % 6 == 0) and (random.random() < 0.4):
+            while count < len(form):
+                form[count]   += (4/3)
+                form[count+1] += (4/3)
+                form[count+2] += (4/3)
+                form[count+3] -= (8/3)
+                form[count+4] += (4/3)
+                form[count+5] -= (8/3)
+                count += 6
+            syllabic_normalization_strategy += " (6-line Burns stanza-like)"
+        elif (len(form) % 3 == 0 and (random.random() < 0.333333)):
+            while count < len(form):
+                form[count] -= 1
+                form[count+1] += 2
+                form[count+2] -= 1
+                count += 3
+            syllabic_normalization_strategy += " (3-line haiku-like)"
+        elif (len(form) % 3 == 0 and (random.random() < 0.333333)):
+            while count < len(form):
+                form[count] += 1
+                form[count+1] -= 2
+                form[count+2] += 1
+                count += 3
+            syllabic_normalization_strategy += " (3-line terza rima-like with short middle line)"
+        elif (len(form) % 5 == 0) and (random.random() < 0.5):
+            while count < len(form):
+                sign = 1 if syllable_debt <= 0 else -1
+                form[count]   += (1 * sign)
+                form[count+1] -= (1 * sign)
+                form[count+2] += (1 * sign)
+                form[count+3] -= (1 * sign)
+                form[count+4] += (1 * sign)
+                count += 5
+                syllable_debt += sign
+            syllabic_normalization_strategy += " (5-line alternating ballad with initial debt of %d)" % syllable_debt
+        elif (len(form) % 5 == 0) and (random.random() < 0.15):
+            while count < len(form):
+                form[count]   -= 2.4
+                form[count+1] -= 0.4
+                form[count+2] += 1.6
+                form[count+3] += 3.6
+                form[count+4] -= 2.4
+                count += 5
+            syllabic_normalization_strategy += " (cinquain-like)"
+        elif (len(form) % 9 == 0) and (min(form) >= 6) and (random.random() < 0.4):
+            while count < len(form):
+                form[count]   -= (32/9)
+                form[count+1] -= (14/9)
+                form[count+2] += (4/9)
+                form[count+3] += (22/9)
+                form[count+4] += (40/9)
+                form[count+5] += (22/9)
+                form[count+6] += (4/9)
+                form[count+7] -= (14/9)
+                form[count+8] -= (32/9)
+                count += 5
+            syllabic_normalization_strategy += " (richtameter-like)"
+        elif (len(form) % 2 == 0) and (random.random() < 0.6):
+            while count < len(form):
+                form[count] += 1
+                form[count+1] -= 1
+                count += 2
+            syllabic_normalization_strategy += " (2-line terza rima with short middle line)"
+
+        # Next, pay off any syllabic debt.
+        if syllable_debt:
+            for i in random.sample(range(len(form)), syllable_debt):    # Choose random lines from the poem
+                form[i] -= 1                                            # ... they can pay off the debt.
         tokenized_poem = genny._token_list(the_poem, character_tokens=False)
         working_copy = ''.join(list(the_poem))
         lines, total_syllables = [][:], 0
@@ -763,7 +853,7 @@ def old_selection_method(available):
     global the_tags
     log_it(" ... according to the old (pure random choice) method")
     the_tags += ['old textual selection method']
-    return random.sample(available, random.randint(60, 150))
+    return random.sample(available, random.randint(100, 300))
 
 def new_selection_method(available, similarity_cache):
     """The "new method" for choosing source texts involves picking a small number of

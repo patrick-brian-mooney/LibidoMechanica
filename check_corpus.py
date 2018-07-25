@@ -192,6 +192,7 @@ def check_file(what_file: str) -> None:
         original_text = the_file.read()
     the_text = original_text.split('\n')
 
+    # First, perform line-by-line tests.
     if not check_test_performed(what_file, 'strip trailing whitespace'):
         the_text = [ l.rstrip() for l in the_text ]      # Drop whitespace at the end of lines
         set_test_performed(what_file, "strip trailing whitespace")
@@ -204,7 +205,17 @@ def check_file(what_file: str) -> None:
     else:
         log_it("    Skipping check for beginning-of-line capitalization: already performed!", 5)
 
+    # Now, whole-text tests.
     the_text = '\n'.join(the_text)
+    if not check_test_performed(what_file, "file ends with one newline"):
+        if not the_text.endswith('\n'):
+            the_text += "\n"
+        while the_text.endswith('\n\n'):
+            the_text = the_text[:-1]
+        set_test_performed(what_file, "file ends with one newline")
+    else:
+        log_it("    Skipping check for single end newline: already performed!", 5)
+
     if the_text != original_text:
         log_it("  INFO: file changed: %s. Saving ..." % os.path.basename(what_file), 1)
         with open(what_file, 'w') as the_file:
