@@ -896,7 +896,7 @@ def new_selection_method(available, similarity_cache):
     return ret
 
 
-oldmethod = True               # Set to True when tweaking the newer method to use the old method as a fallback.
+oldmethod = False               # Set to True when tweaking the newer method to use the old method as a fallback.
 def get_source_texts(similarity_cache):
     """Return a list of partially randomly selected texts to serve as the source texts
     for the poem we're writing. There are currently two textual selection methods,
