@@ -477,6 +477,57 @@ George Gordon, Lord Byron, "Stanzas for Music"
 George Gordon, Lord Byron, "They Say That Hope Is Happiness"
 George Gordon, Lord Byron: "When We Two Parted"
 George Gordon, Lord Byron, "Written after Swimming from Sestos to Abydos"
+George Meredith: "Dirge in Woods"
+George Meredith: "Modern Love" 01
+George Meredith: "Modern Love" 02
+George Meredith: "Modern Love" 03
+George Meredith: "Modern Love" 04
+George Meredith: "Modern Love" 05
+George Meredith: "Modern Love" 06
+George Meredith: "Modern Love" 07
+George Meredith: "Modern Love" 08
+George Meredith: "Modern Love" 09
+George Meredith: "Modern Love" 10
+George Meredith: "Modern Love" 11
+George Meredith: "Modern Love" 12
+George Meredith: "Modern Love" 13
+George Meredith: "Modern Love" 14
+George Meredith: "Modern Love" 15
+George Meredith: "Modern Love" 16
+George Meredith: "Modern Love" 17
+George Meredith: "Modern Love" 18
+George Meredith: "Modern Love" 19
+George Meredith: "Modern Love" 20
+George Meredith: "Modern Love" 21
+George Meredith: "Modern Love" 22
+George Meredith: "Modern Love" 23
+George Meredith: "Modern Love" 24
+George Meredith: "Modern Love" 25
+George Meredith: "Modern Love" 26
+George Meredith: "Modern Love" 27
+George Meredith: "Modern Love" 28
+George Meredith: "Modern Love" 29
+George Meredith: "Modern Love" 30
+George Meredith: "Modern Love" 31
+George Meredith: "Modern Love" 32
+George Meredith: "Modern Love" 33
+George Meredith: "Modern Love" 34
+George Meredith: "Modern Love" 35
+George Meredith: "Modern Love" 36
+George Meredith: "Modern Love" 37
+George Meredith: "Modern Love" 38
+George Meredith: "Modern Love" 39
+George Meredith: "Modern Love" 40
+George Meredith: "Modern Love" 41
+George Meredith: "Modern Love" 42
+George Meredith: "Modern Love" 43
+George Meredith: "Modern Love" 44
+George Meredith: "Modern Love" 45
+George Meredith: "Modern Love" 46
+George Meredith: "Modern Love" 47
+George Meredith: "Modern Love" 48
+George Meredith: "Modern Love" 49
+George Meredith: "Modern Love" 50
 George Oppen: "Who Shall Doubt"
 Gerald Stern: "Galaxy Love"
 Graham Foust: "Love Poem"
@@ -596,6 +647,7 @@ John Keats: "The Eve of St. Agnes"
 John Keats: "To Autumn"
 John Keats: "To Sleep"
 John Keats: "When I have fears that I may cease to be"
+John Milton: "Lycidas"
 John Milton: "Paradise Lost, Book IV, Lines 639–652"
 John Milton, Sonnet 23
 John Wilbye, "Love Not Me"
@@ -728,7 +780,12 @@ Mary Elizabeth Coleridge, "No Newspapers"
 Mary Jo Bang, "You Were You Are Elegy"
 Mary Jo Salter, "Video Blues"
 Mary Sidney Herbert, "A Dialogue between two shepherds, Thenot and Piers, in praise of ASTREA"
+Matthew Arnold: "Isolation: To Marguerite"
+Matthew Arnold: "Memorial Verses"
 Matthew Arnold: "The Buried Life"
+Matthew Arnold: "The Forsaken Merman"
+Matthew Arnold: "Thyrsis: A Monody, to Commemorate the Author's Friend, Arthur Hugh Clough"
+Matthew Arnold: "To Marguerite: Continued"
 Matthew Olzmann: "Astronomers Locate a New Planet"
 Matthew Prior: "A Better Answer"
 Matthew Prior: "An Epitaph"
@@ -781,6 +838,7 @@ Patrick Phillips: "Falling"
 Paul Farley: "Dependants"
 Paul Laurence Dunbar: "Compensation"
 Paul Laurence Dunbar: "Invitation to Love"
+Percy Shelley: "Adonais: An Elegy on the Death of John Keats"
 Percy Shelley: "Hymn to Intellectual Beauty"
 Percy Shelley, "Love's Philosophy"
 Percy Shelley: "Mutability ['The flower that smiles to-day']"
@@ -1477,6 +1535,7 @@ William Carlos Williams: "Love"
 William Carlos Williams: "The Desolate Field"
 William Cowper, "Sweet stream, that winds through yonder glade"
 William Dunbar: "Sweet Rose of Virtue"
+William Makepeace Thackeray: "Sorrows of Werther"
 William Shakespeare, "Blow, Blow, Thou Winter Wind" [from As You Like It]
 William Shakespeare, "It Was a Lover and His Lass" [from As You Like It]
 William Shakespeare: "O, beware, my lord, of jealousy [Othello, Act III, Scene III]"

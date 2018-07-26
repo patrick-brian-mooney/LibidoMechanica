@@ -288,8 +288,8 @@ def regularize_form(the_poem):
            making the decision, then base than decision on which choice leaves us
            closer to our current goal at the end of the line.
     """
-    log_it("Attempting to regularize poetic form ...", 3)
     global post_data
+    log_it("Attempting to regularize poetic form ...", 3)
     form = None
     syllable_debt = 0
     total_syllables = sum([syllable_count(word) for word in genny._token_list(the_poem, character_tokens=False)])
@@ -432,7 +432,7 @@ def regularize_form(the_poem):
             current_line += current_token_with_context
             total_syllables += syllable_count(current_token)
             if total_syllables >= current_goal:         # We've (probably) hit a line break. Reset the things that need to be reset.
-                if not tokenized_poem or (syllable_count(tokenized_poem[0]) != 0):      # If there are zero-syllable tokens coming up, don't break yet.
+                if (not tokenized_poem) or (syllable_count(tokenized_poem[0]) != 0):      # If there are zero-syllable tokens coming up, don't break yet.
                     lines += [current_line + '\n' if not current_line.endswith('\n') else ""]
                     current_line = ''
                     try:
