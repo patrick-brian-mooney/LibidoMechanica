@@ -201,19 +201,23 @@ def is_prime(n):
         assert (int(n) == n and n >= 1), "ERROR: is_prime() called on %s, which is not a positive integer" % n
         return (len(factors(n)) < 3)
 
+
 def lines_without_stanza_breaks(the_poem):
     """Returns a *list* of lines from THE_POEM, removing any stanza breaks."""
     return [l for l in the_poem.split('\n') if len(l.strip()) > 0]
 
 def total_lines(the_poem):
     """Returns the total number of non-empty lines in the poem."""
-    return len(lines_without_stanza_breaks(the_poem))
+    ret = len(lines_without_stanza_breaks(the_poem))
+    log_it("    current total lines in poem: %d" % ret, 5)
+    return ret
 
 
 def remove_single_lines(the_poem, combination_probability=0.85):
     """Takes the poem passed as THE_POEM and goes through it, (randomly) eliminating
     single-line stanzas. Returns the modified poem.
     """
+    log_it("Removing single lines from the poem with probability %f" % (100 * combination_probability), 3)
     stanzas = [l.split('\n') for l in the_poem.split('\n\n')]   # A list of stanzas, each of which is a list of lines
     i = 0
     while i < len(stanzas):
@@ -284,6 +288,7 @@ def regularize_form(the_poem):
            making the decision, then base than decision on which choice leaves us
            closer to our current goal at the end of the line.
     """
+    log_it("Attempting to regularize poetic form ...", 3)
     global post_data
     form = None
     syllable_debt = 0
@@ -296,10 +301,12 @@ def regularize_form(the_poem):
         length = random.choice(single_line_counts)
         form = [length] * (total_syllables // length)
         post_data['syllabic_normalization_strategy'] = 'Regular line length: %d syllables' % length
+        log_it("    ... basic strategy: %d syllables per line" % length, 4)
     elif random.random() < 0.4:
         length = total_syllables / the_poem.count('\n')
         form = [length] * the_poem.count('\n')
         post_data['syllabic_normalization_strategy'] = 'Fractional regular line length, based on average: %.4g syllables' % length
+        log_it("    ... basic strategy: %f syllables per line" % length, 4)
     elif random.random() < 0.7:
         while not form:
             syllable_debt += 1      # There's a good chance we've already tried, and failed, with zero.
@@ -309,41 +316,15 @@ def regularize_form(the_poem):
                 length = random.choice(single_line_counts)
                 form = [length] * ((total_syllables + syllable_debt) // length)
                 post_data['syllabic_normalization_strategy'] = 'Regular line length: %d syllables, with syllabic debt of %d' % (length, syllable_debt)
+        log_it("    ... basic strategy: %d syllables per line, with debt of %d syllables" % (length, syllable_debt), 4)
 
     # First, vary the form planned, as appropriate. Once again, much more work needed (or at least possible) here.
+    log_it("INFO: Deciding whether to apply transformations to basic pattern ...", 3)
     if form:
         count = 0
-        if (len(form) % 6 == 0) and (random.random() < 0.5):
-            post_data['syllabic_normalization_strategy'] += " (6-line Burns stanza-like)"
-            while count < len(form):
-                form[count]   += (4/3)
-                form[count+1] += (4/3)
-                form[count+2] += (4/3)
-                form[count+3] -= (8/3)
-                form[count+4] += (4/3)
-                form[count+5] -= (8/3)
-                count += 6
-        elif (len(form) % 5 == 0) and (random.random() < 0.5):
-            post_data['syllabic_normalization_strategy'] += ' (5-line alternating "ballad" with initial debt of %d)' % syllable_debt
-            while count < len(form):
-                sign = 1 if syllable_debt <= 0 else -1
-                form[count]   += (1 * sign)
-                form[count+1] -= (1 * sign)
-                form[count+2] += (1 * sign)
-                form[count+3] -= (1 * sign)
-                form[count+4] += (1 * sign)
-                count += 5
-                syllable_debt += sign
-        elif (len(form) % 5 == 0) and (random.random() < 0.15):
-            post_data['syllabic_normalization_strategy'] += " (cinquain-like)"
-            while count < len(form):
-                form[count]   -= 2.4
-                form[count+1] -= 0.4
-                form[count+2] += 1.6
-                form[count+3] += 3.6
-                form[count+4] -= 2.4
-                count += 5
-        elif (len(form) % 9 == 0) and (min(form) >= 6) and (random.random() < 0.4):
+        if (len(form) % 9 == 0) and (min(form) >= 6) and (random.random() < 0.4):
+            log_it("    choosing richatameter as basic modification model", 4)
+            post_data['stanza length'] = 9          # Force regular-number-of-lines stanzas as form.
             post_data['syllabic_normalization_strategy'] += " (richtameter-like)"
             while count < len(form):
                 form[count]   -= (32/9)
@@ -356,7 +337,45 @@ def regularize_form(the_poem):
                 form[count+7] -= (14/9)
                 form[count+8] -= (32/9)
                 count += 5
+        elif (len(form) % 6 == 0) and (random.random() < 0.5):
+            log_it("    choosing Burns stanza as basic modification model", 4)
+            post_data['stanza length'] = 6          # Force regular-number-of-lines stanzas as form.
+            post_data['syllabic_normalization_strategy'] += " (6-line Burns stanza-like)"
+            while count < len(form):
+                form[count]   += (4/3)
+                form[count+1] += (4/3)
+                form[count+2] += (4/3)
+                form[count+3] -= (8/3)
+                form[count+4] += (4/3)
+                form[count+5] -= (8/3)
+                count += 6
+        elif (len(form) % 5 == 0) and (random.random() < 0.5):
+            log_it('    choosing five-line "ballad" as basic modification model', 4)
+            post_data['stanza length'] = 5          # Force regular-number-of-lines stanzas as form.
+            post_data['syllabic_normalization_strategy'] += ' (5-line alternating "ballad" with initial debt of %d)' % syllable_debt
+            while count < len(form):
+                sign = 1 if syllable_debt <= 0 else -1
+                form[count]   += (1 * sign)
+                form[count+1] -= (1 * sign)
+                form[count+2] += (1 * sign)
+                form[count+3] -= (1 * sign)
+                form[count+4] += (1 * sign)
+                count += 5
+                syllable_debt += sign
+        elif (len(form) % 5 == 0) and (random.random() < 0.15):
+            log_it("    choosing cinquain as basic modification model", 4)
+            post_data['stanza length'] = 5          # Force regular-number-of-lines stanzas as form.
+            post_data['syllabic_normalization_strategy'] += " (cinquain-like)"
+            while count < len(form):
+                form[count]   -= 2.4
+                form[count+1] -= 0.4
+                form[count+2] += 1.6
+                form[count+3] += 3.6
+                form[count+4] -= 2.4
+                count += 5
         elif (len(form) % 4 == 0) and (random.random() < 0.4):
+            log_it('    choosing "ballad" with short last line with as basic modification model', 4)
+            post_data['stanza length'] = 4          # Force regular-number-of-lines stanzas as form.
             post_data['syllabic_normalization_strategy'] += " (4-line ballad-like with short last line)"
             while count < len(form):
                 form[count] += 1
@@ -364,6 +383,8 @@ def regularize_form(the_poem):
                 form[count + 3] -= 2
                 count += 4
         elif (len(form) % 3 == 0 and (random.random() < 0.333333)):
+            log_it("    choosing haiku as basic modification model", 4)
+            post_data['stanza length'] = 3          # Force regular-number-of-lines stanzas as form.
             post_data['syllabic_normalization_strategy'] += " (3-line haiku-like)"
             while count < len(form):
                 form[count] -= 1
@@ -371,6 +392,8 @@ def regularize_form(the_poem):
                 form[count + 2] -= 1
                 count += 3
         elif (len(form) % 3 == 0 and (random.random() < 0.333333)):
+            log_it("    choosing short-middle-line terza rima as basic modification model", 4)
+            post_data['stanza length'] = 3          # Force regular-number-of-lines stanzas as form.
             post_data['syllabic_normalization_strategy'] += " (3-line terza rima-like with short middle line)"
             while count < len(form):
                 form[count] += 1
@@ -378,6 +401,8 @@ def regularize_form(the_poem):
                 form[count + 2] += 1
                 count += 3
         elif (len(form) % 2 == 0) and (random.random() < 0.6):
+            log_it("    choosing two-line ballad-like stanza as basic modification model", 4)
+            post_data['stanza length'] = 2          # Force regular-number-of-lines stanzas as form.
             post_data['syllabic_normalization_strategy'] += " (2-line ballad-like)"
             while count < len(form):
                 form[count] += 1
@@ -386,10 +411,13 @@ def regularize_form(the_poem):
 
         # Next, pay off any syllabic debt.
         if syllable_debt:
+            log_it("... paying off syllabic debt", 3)
             for i in random.sample(range(len(form)), syllable_debt):    # Choose random lines from the poem
+                log_it("    ... removing one syllable from line %d" % i, 5)
                 form[i] -= 1                                            # ... they can pay off the debt.
 
         # OK, now make the poem conform (approximately) to the form we planned.
+        log_it("INFO: re-breaking poetic lines ...", 4)
         tokenized_poem = genny._token_list(the_poem, character_tokens=False)
         working_copy = ''.join(list(the_poem))
         lines, total_syllables = [][:], 0
@@ -415,16 +443,17 @@ def regularize_form(the_poem):
 
     # OK, now that we've rearranged words from one line to another, we modify the overall stanza form of the poem.
     textual_lines = lines_without_stanza_breaks(the_poem)
-    if (not is_prime(len(textual_lines))) and (random.random() < 0.8):
-        post_data['normalization_strategy'] = 'regular stanza length'
-        possible_stanza_lengths = factors(len(textual_lines))
-        if len([x for x in possible_stanza_lengths if x >= 3]):     # If possible, prefer stanzas at least as long as Dante's in the Divine Comedy.
-            possible_stanza_lengths = [x for x in possible_stanza_lengths if x >= 3]
-        if len([x for x in possible_stanza_lengths if x <= 16]):    # If possible, choose a stanza length no longer than Meredith's extended sonnets in /Modern Love/.
-            possible_stanza_lengths = [x for x in possible_stanza_lengths if x <= 16]
-        post_data['stanza length'] = random.choice(possible_stanza_lengths)
-        if post_data['stanza length'] == 1:
-            post_data['stanza length'] = len(textual_lines)      # 1 long stanza, not many one-line stanzas
+    if post_data['stanza length'] or ((not is_prime(len(textual_lines))) and (random.random() < 0.8)):
+        if not post_data['stanza length']:
+            post_data['normalization_strategy'] = 'regular stanza length'
+            possible_stanza_lengths = factors(len(textual_lines))
+            if len([x for x in possible_stanza_lengths if x >= 3]):     # If possible, prefer stanzas at least as long as Dante's in the Divine Comedy.
+                possible_stanza_lengths = [x for x in possible_stanza_lengths if x >= 3]
+            if len([x for x in possible_stanza_lengths if x <= 16]):    # If possible, choose a stanza length no longer than Meredith's extended sonnets in /Modern Love/.
+                possible_stanza_lengths = [x for x in possible_stanza_lengths if x <= 16]
+            post_data['stanza length'] = random.choice(possible_stanza_lengths)
+            if post_data['stanza length'] == 1:
+                post_data['stanza length'] = len(textual_lines)      # 1 long stanza, not many one-line stanzas
         the_poem = ""
         for stanza in range(0, len(textual_lines) // post_data['stanza length']):  # Iterate over the appropriate # of stanzas
             for line in range(0, post_data['stanza length']):
@@ -463,7 +492,10 @@ def fix_punctuation(the_poem):
     THE_POEM is a string, which is the text of the entire poem; the function
     returns a new, punctuation-fixed version of the poem passed in.
 
-    NOT YET FULLY IMPLEMENTED. (What still needs to be done?)
+    NOT YET FULLY IMPLEMENTED.
+    #FIXME: balancing punctuation needs to stop using heuristics and accurately
+            check structure.
+    #FIXME: we need to deal with the single/double quotes nesting problem.
     """
     log_it("INFO: about to alter punctuation", 2)
     the_poem = strip_invalid_chars(the_poem)
@@ -920,7 +952,7 @@ def new_selection_method(available, similarity_cache):
     Because the similarity calculations are comparatively slow, but many of them
     must be performed to choose a set of training poems, the results of the
     similarity calculations are stored in a persistent cache of similarity-
-    calculation results.
+    calculation results between runs.
     """
     global post_data
     ret = random.sample(available, random.randint(3, 7))  # Seed the pot with several random source texts.
