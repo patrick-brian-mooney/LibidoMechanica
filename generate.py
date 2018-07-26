@@ -512,27 +512,23 @@ def get_title(the_poem):
     function picks one at random.
     """
     log_it("INFO: getting a title for the poem", 2)
-    possible_titles = [
-      lambda: "Untitled Poem # %d" % (1 + count_previous_untitled_poems()),
-      lambda: "Untitled Composition # %d" % (1 + count_previous_untitled_poems()),
-      lambda: "Untitled # %d" % (1 + count_previous_untitled_poems()),
-      lambda: "Untitled (‘%s’)" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip(),
-      lambda: "Untitled (‘%s’)" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip(),
-      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.strip().split('\n')[0]).strip(),  # First line, in quotes
-      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.strip().split('\n')[0]).strip(),  # First line, in quotes
-      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.strip().split('\n')[0]).strip(),  # First line, in quotes
-      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.strip().split('\n')[0]).strip(),  # First line, in quotes
-      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip(),
-      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip(),
-      lambda: "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip(),
-      lambda: th.strip_leading_and_trailing_punctuation(genny.gen_text(sentences_desired=1).split('\n')[0].strip()),  # New 'sentence'
-      lambda: th.strip_leading_and_trailing_punctuation(genny.gen_text(sentences_desired=1).split('\n')[0].strip()),  # New 'sentence'
-      lambda: th.strip_leading_and_trailing_punctuation(genny.gen_text(sentences_desired=1).split('\n')[0].strip()),  # New 'sentence'
-    ]
-    title = random.choice(possible_titles)()
-    if len(title) < 3:                  # Try again, recursively.
+    if random.random() < (1/15):
+        title = "Untitled Poem # %d" % (1 + count_previous_untitled_poems())
+    elif random.random() < (1/14):
+        title = "Untitled Composition # %d" % (1 + count_previous_untitled_poems())
+    elif random.random() < (1/13):
+        title = "Untitled # %d" % (1 + count_previous_untitled_poems())
+    elif random.random() < (2/12):
+        title = "Untitled (‘%s’)" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip()
+    elif random.random() < (4/10):          # First line, in quotes
+        title = th.strip_leading_and_trailing_punctuation(the_poem.strip().split('\n')[0]).strip()
+    elif random.random() < (3/6):           # Pick one of the first three lines
+        title = "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip()
+    else:                                   # New 'sentence'
+        title = th.strip_leading_and_trailing_punctuation(genny.gen_text(sentences_desired=1).split('\n')[0].strip())
+    if len(title) < 5:                              # Try again, recursively.
         title = get_title(the_poem)
-    while len(title) > 90:
+    while len(title) > 70:
         words = title.split()
         title = ' '.join(words[:random.randint(3, min(12, len(words)))])
     title = title.strip()
@@ -597,7 +593,7 @@ def curlify_quotes(the_poem, straight_quote, opening_quote, closing_quote):
             elif straight_quote == "'":
                 the_poem = the_poem[:index-1] + closing_quote + the_poem[index+1:]  # Make it an apostrophe.
             else:
-                raise NotImplementedError                                           # We don't know how to deal with this quote.
+                raise NotImplementedError("We don't know how to deal with this quote: %s " % straight_quote)
     return the_poem
 
 def balance_punctuation(the_poem, opening_char, closing_char):
