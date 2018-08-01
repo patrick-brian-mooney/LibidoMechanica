@@ -99,12 +99,26 @@ LICENSE.md for more details.
 # * Something is occasionally truncating poems early.
 #   * Should start to passively diagnose problems like this by moving copies of their JSON archive data to folders
 #     that track instances of those problems.
-#   * Comm -1 -2 a.json b.json (or such) should then help look for similarities.
+#   * comm -1 -2 a.json b.json (or such) should then help look for similarities.
 # * Conversely, something is duplicating the last stanza sometimes.
+# * We should syllabify the entire source corpus, keeping a list of which words are manually syllabified, then
+#   check to see if they're syllabified correctly, and keep a second dictionary to use in addition to the CMU corpus.
+# * Deepening and diversifying the corpus is always a goal.
+# * There are other ideas for how to judge source-text similarity:
+#   * (approximate) year of composition
+#   * geographical nearness
+#   * various author characteristics
+#   * all of these would require manual metadata entry. Oh boy, another pickled dictionary or something.
+# * Tokenizing currently drops leading space, which shouldn't happen, actually.
+# * "token with context" doesn't quite mean the right thing in the reflowing loop in regularize_form().
+#   * There's a note with more detail that's currently at line 471.
+# * We should have CAPITALIZATION NORMALIZATION goin' on. In the output, I mean.
+#   * Also other formal things: patterns of leading space, e.g.
 # * When a title needs to be shortened, the current algorithm simply lops off a random number of tokens until the
 #   phrase is short enough. This works sometimes, but also produces titles that, say, end with conjunctions an
 #   unpleasant amount of the time. It would be smarter to generate a parse tree for the relevant sentence,
-#   then grab an appropriate-length branch (or branches) of it.
+#   then grab an appropriate-length branch (or branches) from it.
+#   * Maybe we should shorten the maximum length a bit, too.
 # * There is of course always parameter tweaking. Documentation improvements, too.
 # * We should try harder to avoid producing poems with a prime number of lines.
 #   * Come right down to it, we should also try harder to avoid producing poems with a PRIME-LIKE number of syllables.
@@ -116,11 +130,16 @@ LICENSE.md for more details.
 #   need to learn some sort of simple database implementation before the corpus gets much bigger.
 # * The directory structure needs reworking, and this module needs to be split into smaller files.
 #   * If nothing else, SimilarityCache should be spun off to a separate module.
-#   * This probably imples a utils/ folder for secondary scripts, like check_corpus.py.
+#     * Some of the other utility code could probably be moved to text_handling.py or such.
+#   * This probably implies a utils/ folder for secondary scripts, like check_corpus.py.
 #     * There will almost certainly be others.
 # * There's still trouble with intra-word apostrophes.
 #   * Same deal with leading apostrophes in archaic contractions with an initial dropped-letters apostrophe (''tis")
 #     * Probably best dealt with by preprocessing and using something apostrophe-like in the source texts.
+# * "Is it an opening or a closing quote?" gets it wrong when:
+#   * there is a previous non-alphabetic (-alphanumeric?) character:
+#     * em dash-apostrophe-capital letter should turn the apostrophe into an opening single quote, but gets it wrong
+
 
 import bz2, contextlib, datetime, functools, glob, json, os
 import pickle, pprint, random, re, string, sys, time, unicodedata
