@@ -95,6 +95,32 @@ GPL, either version 3, or (at your option) any later version; see the file
 LICENSE.md for more details.
 """
 
+# Current list of things so annoying that they're likely to get priority in fixing:
+# * Something is occasionally truncating poems early.
+#   * Should start to passively diagnose problems like this by moving copies of their JSON archive data to folders
+#     that track instances of those problems.
+#   * Comm -1 -2 a.json b.json (or such) should then help look for similarities.
+# * Conversely, something is duplicating the last stanza sometimes.
+# * When a title needs to be shortened, the current algorithm simply lops off a random number of tokens until the
+#   phrase is short enough. This works sometimes, but also produces titles that, say, end with conjunctions an
+#   unpleasant amount of the time. It would be smarter to generate a parse tree for the relevant sentence,
+#   then grab an appropriate-length branch (or branches) of it.
+# * There is of course always parameter tweaking. Documentation improvements, too.
+# * We should try harder to avoid producing poems with a prime number of lines.
+#   * Come right down to it, we should also try harder to avoid producing poems with a PRIME-LIKE number of syllables.
+#     (By which I mean: no USEFUL factors in the number. It's surprising how many poems are generated with a total
+#     number of syllables that has no factors that are plausible poetic line lengths.)
+# * Over the long term, we need a better way to store and access the similarity cache. If we double the size of the
+#   corpus from here, we would be well over 100MB in a single bzipped, already-pickle-compressed pickle file. That's
+#   super-unwieldy. Plus, having all of that in memory at once already causes occasional problems at this size. I
+#   need to learn some sort of simple database implementation before the corpus gets much bigger.
+# * The directory structure needs reworking, and this module needs to be split into smaller files.
+#   * If nothing else, SimilarityCache should be spun off to a separate module.
+#   * This probably imples a utils/ folder for secondary scripts, like check_corpus.py.
+#     * There will almost certainly be others.
+# * There's still trouble with intra-word apostrophes.
+#   * Same deal with leading apostrophes in archaic contractions with an initial dropped-letters apostrophe (''tis")
+#     * Probably best dealt with by preprocessing and using something apostrophe-like in the source texts.
 
 import bz2, contextlib, datetime, functools, glob, json, os
 import pickle, pprint, random, re, string, sys, time, unicodedata
@@ -311,7 +337,7 @@ def regularize_form(the_poem):
         while not form:
             syllable_debt += 1      # There's a good chance we've already tried, and failed, with zero.
             syllabic_factors = factors(syllable_debt + total_syllables)
-            single_line_counts = list(set(syllabic_factors) & set(range(7, 17)))
+            single_line_counts = sorted(list(set(syllabic_factors) & set(range(7, 17))))
             if single_line_counts:
                 length = random.choice(single_line_counts)
                 form = [length] * ((total_syllables + syllable_debt) // length)
@@ -430,7 +456,7 @@ def regularize_form(the_poem):
         lines, total_syllables = [][:], 0
         current_line = ''
         current_goal = form.pop(0)
-        while tokenized_poem:
+        while tokenized_poem:           #FIXME: "context" should mean "token & what's after", not "& what's before"
             current_token = tokenized_poem.pop(0)
             current_token_with_context = working_copy[:working_copy.find(current_token) + len(current_token)]
             if current_token_with_context.count('\n'):
@@ -446,6 +472,8 @@ def regularize_form(the_poem):
                         current_goal += form.pop(0)
                     except IndexError:                  # No more lines left? Just run to end of poem.
                         current_goal += sum([syllable_count(word) for word in tokenized_poem])
+        if tokenized_poem:
+            raise RuntimeError("There is leftover material that has not been put into the new poem:")
         the_poem = ''.join(lines)
 
     # OK, now that we've rearranged words from one line to another, we modify the overall stanza form of the poem.
@@ -996,7 +1024,7 @@ def new_selection_method(available, similarity_cache):
     return ret
 
 
-oldmethod = True               # Set to True when tweaking the newer method to use the old method as a fallback.
+oldmethod = False               # Set to True when tweaking the newer method to use the old method as a fallback.
 def get_source_texts(similarity_cache):
     """Return a list of partially randomly selected texts to serve as the source texts
     for the poem we're writing. There are currently two textual selection methods,

@@ -89,7 +89,7 @@ def prompt_and_confirm(prompt: str) -> bool:
     try:
         return input("%s? [Y/n]  " % prompt).strip().lower()[0] == "y"
     except IndexError:          # Not even one character of input?
-        return True                 
+        return True
 
 
 def get_first_word(line: str) -> str:
