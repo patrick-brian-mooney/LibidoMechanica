@@ -24,7 +24,7 @@ import searcher                                     # https://github.com/patrick
 
 import patrick_logger                               # https://github.com/patrick-brian-mooney/python-personal-library/
 from patrick_logger import log_it
-patrick_logger.verbosity_level = 5
+patrick_logger.verbosity_level = 2
 
 
 tests_performed_cache_loc = os.path.join(generate.home_dir, 'tests_performed.pkl.bz2')
@@ -73,7 +73,7 @@ def write_cache() -> None:
 
 
 @contextlib.contextmanager
-def open_cache() -> None:
+def open_cache() -> dict:
     """A context manager that ensures the global cache of tests performed is updated
     when the context manager is exited.
     """
@@ -89,7 +89,7 @@ def prompt_and_confirm(prompt: str) -> bool:
     try:
         return input("%s? [Y/n]  " % prompt).strip().lower()[0] == "y"
     except IndexError:          # Not even one character of input?
-        return True
+        return True                 
 
 
 def get_first_word(line: str) -> str:
@@ -129,8 +129,10 @@ def decapitalize_beginnings_of_lines(the_poem: List[str], poem_path: str) -> Lis
     """
     capitalized_lines = [ l for l in the_poem if len(l.split()) > 0 and th.is_capitalized(l.split()[0]) ]
     textual_lines = [ l for l in the_poem if len(l.strip()) > 0 ]
-    log_it("Poem %s has %d capitalized lines out of %d non-blank lines." %
-           (os.path.basename(poem_path), len(capitalized_lines), len(textual_lines)))
+    log_it("\nPoem: %s:" % shlex.quote(os.path.basename(poem_path)))
+    log_it("%d capitalized lines" % len(capitalized_lines))
+    log_it("%d non-blank lines" % len(textual_lines))
+    log_it("%.4g%% capitalized" % (100 * (len(capitalized_lines) / len(textual_lines))))
     if prompt_and_confirm("Open this file in external editor"):
         subprocess.call('bluefish %s &' % shlex.quote(poem_path), shell=True)
     if prompt_and_confirm("Auto-lowercase lines"):
@@ -187,7 +189,7 @@ def check_file(what_file: str) -> None:
     """
     global tests_performed
 
-    log_it("\n\nINFO: checking %s" % os.path.basename(what_file), 2)
+    log_it("\n\nINFO: checking %s" % os.path.basename(what_file), 3)
     with open(what_file) as the_file:
         original_text = the_file.read()
     the_text = original_text.split('\n')
