@@ -266,7 +266,7 @@ def remove_single_lines(the_poem, combination_probability=0.85):
     stanzas = [l.split('\n') for l in the_poem.split('\n\n')]   # A list of stanzas, each of which is a list of lines
     i = 0
     while i < len(stanzas):
-        if len(stanzas[i]) < 3:
+        if len(stanzas[i]) < 3:                 # If the length of this stanza is less than three ...
             try:                                # Combine it with the next stanza. Probably.
                 if random.random() <= combination_probability:
                     next_stanza = stanzas.pop(i+1)
@@ -762,6 +762,12 @@ def do_final_cleaning(the_poem):
         else:
             index += 1
     the_poem = '\n'.join(poem_lines)
+
+    # OK, now let's check to make sure we don't have a duplicate last stanza.
+    stanzas= the_poem.split('\n\n')
+    if len(stanzas) >= 2:
+        while stanzas[-1].strip().lower() == stanzas[-2].strip().lower():
+            stanzas = stanzas[:-1]
     return regularize_form(the_poem)
 
 
@@ -1009,7 +1015,9 @@ def new_selection_method(available, similarity_cache):
     calculation results between runs.
     """
     global post_data
+
     ret = random.sample(available, random.randint(3, 7))  # Seed the pot with several random source texts.
+    post_data['seed poems'] = [os.path.basename(i) for i in ret]
     for i in ret: available.remove(i)  # Make sure already-chosen texts are not chosen again.
     done, candidates = False, 0
     announced, last_count = set(), 0
@@ -1043,7 +1051,7 @@ def new_selection_method(available, similarity_cache):
     return ret
 
 
-oldmethod = False               # Set to True when tweaking the newer method to use the old method as a fallback.
+oldmethod = False                # Set to True when tweaking the newer method to use the old method as a fallback.
 def get_source_texts(similarity_cache):
     """Return a list of partially randomly selected texts to serve as the source texts
     for the poem we're writing. There are currently two textual selection methods,
