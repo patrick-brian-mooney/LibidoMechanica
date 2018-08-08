@@ -265,7 +265,7 @@ def remove_single_lines(the_poem, combination_probability=0.85):
     log_it("Removing single lines from the poem with probability %f" % (100 * combination_probability), 3)
     stanzas = [l.split('\n') for l in the_poem.split('\n\n')]   # A list of stanzas, each of which is a list of lines
     i = 0
-    while i < len(stanzas):
+    while (i + 1) < len(stanzas):
         if len(stanzas[i]) < 3:                 # If the length of this stanza is less than three ...
             try:                                # Combine it with the next stanza. Probably.
                 if random.random() <= combination_probability:
@@ -274,7 +274,7 @@ def remove_single_lines(the_poem, combination_probability=0.85):
                 else: i += 1
             except IndexError:                  # If there is no next stanza ...
                 if len(stanzas) > 1:            # ... add this stanza to the end of the previous stanza.
-                    stanzas[-2] += stanzas.pop()
+                    stanzas[-1] += stanzas.pop()
         else:
             i += 1
     return '\n\n'.join(['\n'.join(s) for s in stanzas])
