@@ -47,7 +47,7 @@ def load_proper_noun_data() -> List[str]:
       * all files are in utf-8 encoding and end with the extension ".utf-8";
       * a word is capitalized in a dictionary iff it should always be capitalized;
       * dictionaries are all in the DICTIONARIES_LOC directory;
-      * all dicionaries have one word per line.
+      * all dictionaries have one word per line.
     """
     log_it("Loading known proper nouns ...", 2)
     ret = set()

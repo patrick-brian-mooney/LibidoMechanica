@@ -17,8 +17,9 @@ Options:
     --clean, -c     Clean out stale data from the textual similarity cache,
                     then exit.
 
-If no options are given on the command line, the program writes and posts a
-poem, then quits.
+Only one of the above options may be specified; if one is, the specified task
+is performed, then the program quits. If no options are given on the command
+line, the program writes and posts a poem, then quits.
 
 In a nutshell, this program "writes" these "love poems" by training a Markov
 chain-based text generator on a set of existing love poems (a phrase sometimes
@@ -138,7 +139,7 @@ LICENSE.md for more details.
 #   * Same deal with leading apostrophes in archaic contractions with an initial dropped-letters apostrophe (''tis")
 #     * Probably best dealt with by preprocessing and using something apostrophe-like in the source texts.
 # * "Is it an opening or a closing quote?" gets it wrong when:
-#   * there is a previous non-alphabetic (-alphanumeric?) character:
+#   * there is a previous non-alphabetic (or -alphanumeric?) character:
 #     * e.g., em dash-apostrophe-capital letter should turn the apostrophe into an opening single quote, but gets it wrong
 
 
@@ -267,7 +268,9 @@ def remove_single_lines(the_poem, combination_probability=0.85):
     single-line stanzas. Returns the modified poem.
     """
     log_it("Removing single lines from the poem with probability %f" % (100 * combination_probability), 3)
-    stanzas = [l.split('\n') for l in the_poem.split('\n\n')]   # A list of stanzas, each of which is a list of lines
+
+    # First, produce a list of stanzas, each of which is a list of lines
+    stanzas = [[l for l in s.split('\n') if l.strip()] for s in the_poem.split('\n\n')]
     i = 0
     while (i + 1) < len(stanzas):
         if len(stanzas[i]) < 3:                 # If the length of this stanza is less than three ...
@@ -545,7 +548,7 @@ def regularize_form(the_poem):
 
 
 def count_previous_untitled_poems():
-    ret = len([x for x in searcher.get_files_list(post_archives,None) if 'untitled' in x.lower()])
+    ret = len([x for x in searcher.get_files_list(post_archives, None) if 'untitled' in x.lower()])
     log_it("Counted previous untitled poems: %d" % ret, 4)
     return ret
 
@@ -743,7 +746,7 @@ def do_basic_cleaning(the_poem):
     log_it("INFO: about to do basic pre-cleaning of poem", 2)
     the_poem = th.multi_replace(the_poem, [[' \n', '\n'], ['\n\?', '?'], ['\n!', '!'],
                                            ['\n"', '\n'], ['\n”', '\n'], ['\n\n\n', '\n\n'],
-                                           ['\n" ', '\n"'], ['^" ', '"']]).strip()
+                                           ['\n" ', '\n"'], ['^" ', '"']]).rstrip()
     return the_poem
 
 
@@ -1136,7 +1139,7 @@ def main():
     # Force all spaces to be non-breaking spaces
     formatted_poem = th.multi_replace(the_poem, [[' ', '&nbsp;']])
     # Add HTML <br /> to end of every line
-    formatted_poem = '\n'.join([line.rstrip() + '<br />' for line in the_poem.split('\n')])
+    formatted_poem = '\n'.join([line.rstrip() + '<br />' for line in the_poem.split('\n')])   #FIXME: let's not overwrite the result of the previous call.
     # Wrap stanzas in <p> ... </p>
     formatted_poem = '\n'.join(['<p>%s</p>' % line for line in formatted_poem.split('<br />\n<br />')])
     # Eliminate extra line breaks at the very beginning of paragraphs
