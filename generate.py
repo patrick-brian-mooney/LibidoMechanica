@@ -98,10 +98,10 @@ LICENSE.md for more details.
 
 # Current list of things so annoying that they're likely to get priority in fixing:
 # * Something is occasionally truncating poems early.
+#   * It seems to be connected to the lax reduce-single-lines postprocessing schema.
 #   * Should start to passively diagnose problems like this by moving copies of their JSON archive data to folders
 #     that track instances of those problems.
 #   * comm -1 -2 a.json b.json (or such) should then help look for similarities.
-# * Conversely, something is duplicating the last stanza sometimes.                 (FIXED? -- 8 Aug 2018)
 # * We should syllabify the entire source corpus, keeping a list of which words are manually syllabified, then
 #   check to see if they're syllabified correctly, and keep a second dictionary to use in addition to the CMU
 #   corpus.
@@ -112,8 +112,6 @@ LICENSE.md for more details.
 #   * various author characteristics
 #   * all of these would require manual metadata entry. Oh boy, another pickled dictionary or something.
 # * Tokenizing currently drops leading space, which shouldn't happen, actually.
-# * "token with context" doesn't quite mean the right thing in the reflowing loop in regularize_form().
-#   * There's a note with more detail that's currently at line 471.
 # * We should have CAPITALIZATION NORMALIZATION goin' on. In the output, I mean.
 #   * Also other formal things: patterns of leading space, e.g.
 # * When a title needs to be shortened, the current algorithm simply lops off a random number of tokens until the
@@ -473,7 +471,7 @@ def regularize_form(the_poem):
             for i in random.sample(range(len(form)), syllable_debt):    # Choose random lines from the poem
                 log_it("    ... removing one syllable from line %d" % i, 5)
                 form[i] -= 1                                            # ... they can pay off the debt.
-        post_data['form_plan'] = '[' + ', '.join('%.6g' % i for i in form) + ']'
+        post_data['form_plan'] = '[' + ', '.join('%.5g' % i for i in form) + ']'
 
         # OK, now make the poem conform (approximately) to the form we planned.
         log_it("INFO: re-breaking poetic lines ...", 4)
@@ -482,7 +480,7 @@ def regularize_form(the_poem):
         lines, total_syllables = [][:], 0
         current_line = ''
         current_goal = form.pop(0)
-        while tokenized_poem:           #FIXME: "context" should mean "token & what's after", not "& what's before"
+        while tokenized_poem:
             current_token = tokenized_poem.pop(0)
             try:
                 next_token = tokenized_poem[0]              # Look, but don't pop it off the stack
@@ -491,7 +489,7 @@ def regularize_form(the_poem):
                 current_token_with_context = working_copy[:]
                 next_token = ""
             if current_token_with_context.count('\n'):
-                current_token_with_context = th.multi_replace(current_token_with_context, [['\n', ' ']])
+                current_token_with_context = th.multi_replace(current_token_with_context, [['\n', ' '], ['  ', ' ']])
             working_copy = working_copy[len(current_token_with_context):]
             current_line += current_token_with_context
             total_syllables += syllable_count(current_token)
@@ -533,7 +531,7 @@ def regularize_form(the_poem):
         post_data['normalization_strategy'] = 're-introduce random stanza breaks'
         poem_lines = the_poem.split('\n')
         for i in range(0, 1 + random.randint(1, len(textual_lines) // 3)):
-            poem_lines[random.randint(0, len(poem_lines)-1)] += '\n'
+            poem_lines[random.randint(0, len(poem_lines) - 1)] += '\n'
         the_poem = '\n'.join(poem_lines)
     elif random.random() < 0.8:
         post_data['normalization_strategy'] = 'remove single lines (strict)'
@@ -765,7 +763,7 @@ def do_final_cleaning(the_poem):
     while index < (len(poem_lines) - 1):                                # Go through, line by line, making any final changes.
         line = poem_lines[index]
         if '  ' in line.strip():                                        # Multiple whitespace in line? Break into multiple lines
-            individual_lines = ['  ' + i + '\n' for i in line.split('  ')]
+            individual_lines = ['  ' + i + '\n' for i in line.split('  ')]  #FIXME: count how many spaces we're breaking on. Ugh.
             if len(individual_lines) > 1:
                 poem_lines.pop(index)
                 individual_lines.reverse()          # Go through the sub-lines backwards,
