@@ -97,6 +97,7 @@ LICENSE.md for more details.
 """
 
 # Current list of things so annoying that they're likely to get priority in fixing:
+# * Deepening and diversifying the corpus is always a goal.
 # * Something is occasionally truncating poems early.
 #   * It seems to be connected to the lax reduce-single-lines postprocessing schema.
 #   * Should start to passively diagnose problems like this by moving copies of their JSON archive data to folders
@@ -105,11 +106,11 @@ LICENSE.md for more details.
 # * We should syllabify the entire source corpus, keeping a list of which words are manually syllabified, then
 #   check to see if they're syllabified correctly, and keep a second dictionary to use in addition to the CMU
 #   corpus.
-# * Deepening and diversifying the corpus is always a goal.
 # * There are other ideas for how to judge source-text similarity:
 #   * (approximate) year of composition
 #   * geographical nearness
 #   * various author characteristics
+#     * just picking multiple poems from a single author would be a good move with authors who have a sufficient number of poems in the corpus.
 #   * all of these would require manual metadata entry. Oh boy, another pickled dictionary or something.
 # * Tokenizing currently drops leading space, which shouldn't happen, actually.
 # * We should have CAPITALIZATION NORMALIZATION goin' on. In the output, I mean.
@@ -129,8 +130,6 @@ LICENSE.md for more details.
 #   super-unwieldy. Plus, having all of that in memory at once already causes occasional problems at this size. I
 #   need to learn some sort of simple database implementation before the corpus gets much bigger.
 # * The directory structure needs reworking, and this module needs to be split into smaller files.
-#   * If nothing else, SimilarityCache should be spun off to a separate module.
-#     * Some of the other utility code could probably be moved to text_handling.py or such.
 #   * This probably implies a utils/ folder for secondary scripts, like check_corpus.py.
 #     * There will almost certainly be others.
 # * There's still trouble with intra-word apostrophes.
@@ -785,7 +784,7 @@ def old_selection_method(available):
     global post_data
     log_it(" ... according to the old (pure random choice) method")
     post_data['tags'] += ['old textual selection method']
-    return random.sample(available, random.randint(100, 300))
+    return random.sample(available, random.randint(75, 150))
 
 def new_selection_method(available, similarity_cache):
     """The "new method" for choosing source texts involves picking a small number of
@@ -848,7 +847,7 @@ def new_selection_method(available, similarity_cache):
     return ret
 
 
-oldmethod = False                # Set to True when tweaking the newer method to use the old method as a fallback.
+oldmethod = True                # Set to True when debugging to use the (much faster) old method as a fallback.
 def get_source_texts(similarity_cache):
     """Return a list of partially randomly selected texts to serve as the source texts
     for the poem we're writing. There are currently two textual selection methods,
@@ -896,7 +895,7 @@ def main():
     chain_length = round(min(max(random.normalvariate(6, 0.8), 3), 10))
 
     # And track sources of this particular poem
-    source_texts = [ th.remove_prefix(os.path.basename(t), "Link to ").strip() for t in sample_texts ]
+    source_texts = [ th.remove_prefix(t, "Link to ").strip() for t in sample_texts ]
     post_data['tags'] += ['Markov chain length: %d' % chain_length, '%d texts' % len(sample_texts) ]
 
     poem_length = round(min(max(random.normalvariate(10, 5), 4), 200))          # in SENTENCES. Not lines.
