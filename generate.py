@@ -762,8 +762,8 @@ def do_final_cleaning(the_poem):
                 poem_lines.pop(index)
                 individual_lines.reverse()          # Go through the sub-lines backwards,
                 for l in individual_lines:
-                    poem_lines.insert(index, l)     # ... inserting lines and pushing the line stack up.
                     index += 1
+                    poem_lines.insert(index, l)     # ... inserting lines and pushing the line stack up.
         else:
             index += 1
     the_poem = '\n'.join(poem_lines)
