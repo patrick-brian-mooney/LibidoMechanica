@@ -75,7 +75,7 @@ modified, and then updated on disk when the source text selections have been
 made. The class SimilarityCache() is a singleton class: creating one
 automatically reads the cache into memory as the _data attribute of the object
 being instantiated. Normally, this is probably best done with the convenience
-wrapper open_cache(), which is a context manager that ensure the cache is
+wrapper open_cache(), which is a context manager that ensures the cache is
 written back to disk when it is done being used (and has quite likely been
 modified). The convenience function clean_cache() cleans stale data out of the
 cache; the convenience function build_cache() forces it to be fully populated
@@ -133,7 +133,7 @@ LICENSE.md for more details.
 #   * This probably implies a utils/ folder for secondary scripts, like check_corpus.py.
 #     * There will almost certainly be others.
 # * There's still trouble with intra-word apostrophes.
-#   * Same deal with leading apostrophes in archaic contractions with an initial dropped-letters apostrophe (''tis")
+#   * Same deal with leading apostrophes in archaic contractions with an initial dropped-letters apostrophe ("'tis")
 #     * Probably best dealt with by preprocessing and using something apostrophe-like in the source texts.
 # * "Is it an opening or a closing quote?" gets it wrong when:
 #   * there is a previous non-alphabetic (or -alphanumeric?) character:
@@ -156,9 +156,9 @@ import patrick_logger                                   # https://github.com/pat
 from patrick_logger import log_it
 
 import social_media                                     # https://github.com/patrick-brian-mooney/personal-library
-from social_media_auth import libidomechanica_client    # Unshared file that contains authentication constants
+from social_media_auth import libidomechanica_client    # Unshared file that contains authentication tokens
 
-import searcher                                         # https://github.com/patrick-brian-mooney/python-personal-library/blob/master/searcher.py
+import searcher                                         # https://github.com/patrick-brian-mooney/python-personal-library/blob/master/
 
 import poetry_generator as pg                           # https://github.com/patrick-brian-mooney/markov-sentence-generator
 
@@ -201,6 +201,8 @@ def factors(n):
 def manually_count_syllables(word):
     """Clearly not perfect, but better than nothing.
 
+    #FIXME: we should be keeping an additional list for words not in cmudict.
+
     Based on https://datascience.stackexchange.com/a/24865.
     """
     count = 0
@@ -209,15 +211,15 @@ def manually_count_syllables(word):
     if len(word) == 0: return 0             # Naively assume that null words have no syllables.
     if word[0] in vowels:
         count +=1
-    for index in range(1,len(word)):
+    for index in range(1, len(word)):
         if word[index] in vowels and word[index-1] not in vowels:
             count +=1
     if word.endswith('e'):
         count -= 1
     if word.endswith('le'):
-        count+=1
+        count += 1
     if count == 0:
-        count +=1
+        count += 1
     return count
 
 def syllable_count(word):
@@ -257,7 +259,7 @@ def remove_single_lines(the_poem, combination_probability=0.85):
     """Takes the poem passed as THE_POEM and goes through it, (randomly) eliminating
     single-line stanzas. Returns the modified poem.
     """
-    log_it("Removing single lines from the poem with probability %f" % (100 * combination_probability), 3)
+    log_it("Removing single lines from the poem with probability %f %%" % (100 * combination_probability), 3)
 
     # First, produce a list of stanzas, each of which is a list of lines
     stanzas = [[l for l in s.split('\n') if l.strip()] for s in the_poem.split('\n\n')]
@@ -290,11 +292,11 @@ def regularize_form(the_poem):
     Then another line that brings the total syllables to at least forty.
 
     Once it has made basic choices, it may then go back through and vary the plans,
-    using any of several traditional forms as a model for syllabic variation. It
-    keeps track of any syllables over the model it has constructed has relative to
-    the number of syllables in the source text that is going to be reformatted; at
-    the end of the planning process, it randomly removes syllables from anywhere at
-    all in the plan in order to make the number fit. As of this writing (25 July
+    using any of several traditional forms as a rough model for syllabic variation.
+    It keeps track of any syllables over the model it has constructed has relative
+    to the number of syllables in the source text that is going to be reformatted;
+    at the end of the planning process, it randomly removes syllables from anywhere
+    at all in the plan in order to make the number fit. As of this writing (25 July
     2018), the total syllabic debt should never exceed one, but this may change in
     the future.
 
@@ -528,12 +530,12 @@ def regularize_form(the_poem):
     elif random.random() < 0.8:
         post_data['normalization_strategy'] = 'remove single lines (strict)'
         the_poem = remove_single_lines(the_poem, combination_probability=1)
-    if (post_data['normalization_strategy'] == 're-introduce random stanza breaks') or (post_data['normalization_strategy'] == None and (random.random() < 0.8)):
-        if post_data['normalization_strategy'] == 're-introduce random stanza breaks':
-            post_data['normalization_strategy'] += ' + remove single lines (lax)'
-        else:
-            post_data['normalization_strategy'] = 'remove single lines (lax)'
-        the_poem = remove_single_lines(the_poem, combination_probability=0.9)
+#    if (post_data['normalization_strategy'] == 're-introduce random stanza breaks') or (post_data['normalization_strategy'] == None and (random.random() < 0.8)):
+#        if post_data['normalization_strategy'] == 're-introduce random stanza breaks':
+#            post_data['normalization_strategy'] += ' + remove single lines (lax)'
+#        else:
+#            post_data['normalization_strategy'] = 'remove single lines (lax)'
+#        the_poem = remove_single_lines(the_poem, combination_probability=0.9)
     return the_poem
 
 
@@ -761,7 +763,7 @@ def do_final_cleaning(the_poem):
                 individual_lines.reverse()          # Go through the sub-lines backwards,
                 for l in individual_lines:
                     poem_lines.insert(index, l)     # ... inserting lines and pushing the line stack up.
-            index += len(individual_lines)
+                    index += 1
         else:
             index += 1
     the_poem = '\n'.join(poem_lines)
@@ -847,7 +849,7 @@ def new_selection_method(available, similarity_cache):
     return ret
 
 
-oldmethod = True                # Set to True when debugging to use the (much faster) old method as a fallback.
+oldmethod = False                # Set to True when debugging to use the (much faster) old method as a fallback.
 def get_source_texts(similarity_cache):
     """Return a list of partially randomly selected texts to serve as the source texts
     for the poem we're writing. There are currently two textual selection methods,
@@ -905,16 +907,16 @@ def main():
     log_it(" ...trained!")
 
     log_it("INFO: about to generate poem ...")
-    raw_poem = genny.gen_text(sentences_desired=poem_length, paragraph_break_probability=0.2)
+    the_poem = genny.gen_text(sentences_desired=poem_length, paragraph_break_probability=0.2)
 
-    post_data['title'] = get_title(raw_poem)
+    post_data['title'] = get_title(the_poem)
 
     log_it("poem generated; title is: %s" % post_data['title'])
-    log_it("lines are: \n\n" + raw_poem)
+    log_it("lines are: \n\n" + the_poem)
     log_it("tags are: %s" % post_data['tags'])
 
     log_it("INFO: cleaning poem up ...")
-    the_poem = do_basic_cleaning(raw_poem)
+    the_poem = do_basic_cleaning(the_poem)
     the_poem = fix_punctuation(the_poem)
     the_poem = do_final_cleaning(the_poem)
 
@@ -938,7 +940,7 @@ def main():
 
     log_it("INFO: archiving poem and metadata ...")
     post_data['text'], post_data['time'] = the_poem, datetime.datetime.now().isoformat()
-    post_data['raw_poem'], post_data['formatted_text'] = raw_poem, formatted_poem
+    post_data['the_poem'], post_data['formatted_text'] = the_poem, formatted_poem
     post_data['sources'] = sorted(source_texts)
     archive_name = "%s — %s.json.bz2" % (post_data['time'], post_data['title'])
     with bz2.BZ2File(os.path.join(post_archives, archive_name), mode='wb') as archive_file:
