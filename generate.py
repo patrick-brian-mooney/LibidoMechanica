@@ -230,7 +230,7 @@ def syllable_count(word):
     w = ''.join([c for c in word if c.isalpha()])
     try:
         return sum([len(list(y for y in x if y[-1].isdigit())) for x in syllable_dict[w.lower()]])
-    except KeyError:
+    except KeyError as err:
         return manually_count_syllables(w)
 
 def is_prime(n):
@@ -482,9 +482,10 @@ def regularize_form(the_poem):
             except IndexError:                              # At end of poem? "token with context" *is* "token", then.
                 current_token_with_context = working_copy[:]
                 next_token = ""
+            original_len = len(current_token_with_context)      # We're about to modify current_token_with_context, but we'll need to operate on working_copy based on original length
             if current_token_with_context.count('\n'):
                 current_token_with_context = th.multi_replace(current_token_with_context, [['\n', ' '], ['  ', ' ']])
-            working_copy = working_copy[len(current_token_with_context):]
+            working_copy = working_copy[original_len:]
             current_line += current_token_with_context
             total_syllables += syllable_count(current_token)
             if total_syllables >= current_goal:         # We've (probably) hit a line break. Reset the things that need to be reset.
