@@ -783,6 +783,8 @@ def old_selection_method(available):
     are similar to each other. This method of picking training texts often produces
     poems that "feel disjointed" and that contain comparatively longer sections of
     continuous letters from a single source text.
+
+    AVAILABLE is the complete list of available texts.
     """
     global post_data
     log_it(" ... according to the old (pure random choice) method")
@@ -812,6 +814,9 @@ def new_selection_method(available, similarity_cache):
     must be performed to choose a set of training poems, the results of the
     similarity calculations are stored in a persistent cache of similarity-
     calculation results between runs.
+
+    AVAILABLE is the complete list of poems in the corpus.
+    SIMILARITY_CACHE is the already-loaded SimilarityCache object.
     """
     global post_data
 
@@ -944,7 +949,12 @@ def main():
     post_data['the_poem'], post_data['formatted_text'] = the_poem, formatted_poem
     post_data['sources'] = sorted(source_texts)
     archive_name = "%s — %s.json.bz2" % (post_data['time'], post_data['title'])
-    with bz2.BZ2File(os.path.join(post_archives, archive_name), mode='wb') as archive_file:
+    last_folder = sorted([d for d in glob.glob(os.path.join(post_archives, '*')) if os.path.isdir(d)])[-1]
+    if len([f for f in glob.glob(os.path.join(last_folder, "*json.bz2")) if os.path.isfile(f)]) > 999:
+        new_folder = os.path.join(post_archives, "%03d" % (1 + int(os.path.basename(last_folder))))
+        os.mkdir(new_folder)
+        last_folder = new_folder
+    with bz2.BZ2File(os.path.join(last_folder, archive_name), mode='wb') as archive_file:
         archive_file.write(json.dumps(post_data, sort_keys=True, indent=3, ensure_ascii=False).encode())
     log_it("INFO: We're done")
 
