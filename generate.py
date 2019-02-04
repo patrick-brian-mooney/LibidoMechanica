@@ -149,7 +149,7 @@ from nltk.corpus import cmudict                         # nltk.org
 
 
 from utils import *
-from similarity_cache import SimilarityCache
+from similarity_cache import OldSimilarityCache
 
 
 import patrick_logger                                   # https://github.com/patrick-brian-mooney/personal-library
@@ -881,7 +881,7 @@ def open_cache():
     while not opened:
         try:
             with pid.PidFile(piddir=lock_file_dir, pidname=updating_lock_name):
-                similarity_cache = SimilarityCache()
+                similarity_cache = OldSimilarityCache()
                 yield similarity_cache
                 opened = True
                 similarity_cache.flush_cache()
