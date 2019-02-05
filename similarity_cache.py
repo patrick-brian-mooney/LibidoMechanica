@@ -231,10 +231,6 @@ class OldSimilarityCache(object):
 
 
 class SimilarityCache(OldSimilarityCache):
-    pass
-
-
-class NewSimilarityCache(SimilarityCache):
     """This SimilarityCache is a singleton object that manages the global cache of the
     results of similarity calculations. Calculating the similarity between two texts
     is a comparatively time- and memory-intensive operation, so we cache the results
@@ -262,7 +258,7 @@ class NewSimilarityCache(SimilarityCache):
     def __new__(cls, *args, **kwargs):
         """Enforce the requirement that this be a singleton class"""
         if not cls._instance:
-            cls._instance = SimilarityCache.__new__(cls, *args, **kwargs)
+            cls._instance = OldSimilarityCache.__new__(cls, *args, **kwargs)
         return cls._instance
 
     def __init__(self, cache_file=similarity_cache_location):
@@ -379,6 +375,9 @@ class NewSimilarityCache(SimilarityCache):
 
 if __name__ == "__main__":
     # Debugging tests
-    c = NewSimilarityCache()
+    import random
+    c = SimilarityCache()
     print(c)
-    c.build_cache()
+    for i in range(100):
+        a, b = random.choice(glob.glob(os.path.join(poetry_corpus, '*'))), random.choice(glob.glob(os.path.join(poetry_corpus, '*')))
+        print("Similarity between %s and %s is: %.4f" % (os.path.basename(a), os.path.basename(b), c.get_similarity(a,b)))
