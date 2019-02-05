@@ -273,7 +273,7 @@ class SimilarityCache(OldSimilarityCache):
         self._dirty = False
         self._cache_file = cache_file
         try:
-            with bz2.open(self._cache_file + '.new', mode='rb') as pickled_file:
+            with bz2.open(self._cache_file, mode='rb') as pickled_file:
                 self._similarity_data = pickle.load(pickled_file)
                 self._calculation_times = pickle.load(pickled_file)
         except BaseException as err:
@@ -309,7 +309,7 @@ class SimilarityCache(OldSimilarityCache):
             log_it("Skipping cache update: no changes made!", 4)
             return
         log_it("Updating similarity data cache on disk ...", 3)
-        with bz2.open(self._cache_file + '.new', 'wb') as pickled_file:
+        with bz2.open(self._cache_file, 'wb') as pickled_file:
             pickle.dump(self._similarity_data, pickled_file, protocol=pickle.HIGHEST_PROTOCOL)
             pickle.dump(self._calculation_times, pickled_file, protocol=pickle.HIGHEST_PROTOCOL)
         log_it(" ... updated successfully!", 3)
