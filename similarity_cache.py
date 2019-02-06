@@ -239,7 +239,8 @@ class SimilarityCache(OldSimilarityCache):
     Unlike the previous iteration, this is not implemented under the hood as a
     sorted tuple-indexed dictionary yielding another dictionary: this is a pair
     of pandas DataFrames, so the calculations and cacheing should work much more
-    quickly than before.
+    quickly than before. Also unlike its superclass, flushing the cache to disk
+    overwrites, rather than
 
     Interesting object attributes:
       * self._dirty             has the data changed since it was last written to
@@ -279,8 +280,8 @@ class SimilarityCache(OldSimilarityCache):
         except BaseException as err:
             log_it("WARNING! Unable to decode similarity cache because %s. Creating new from scratch ..." % err)
             poem_files = sorted([os.path.basename(f) for f in glob.glob(os.path.join(poetry_corpus, '*'))])
-            self._similarity_data = pd.DataFrame(np.full((len(poem_files), len(poem_files)), -1, dtype="float16"), index=poem_files, columns=poem_files)
-            self._calculation_times = pd.DataFrame(np.full((len(poem_files), len(poem_files)), -1, dtype="float64"), index=poem_files, columns=poem_files)
+            self._similarity_data = pd.DataFrame(np.full((len(poem_files), len(poem_files)), np.nan, dtype="float16"), index=poem_files, columns=poem_files)
+            self._calculation_times = pd.DataFrame(np.full((len(poem_files), len(poem_files)), np.nan, dtype="float64"), index=poem_files, columns=poem_files)
 
     def __str__(self):
         try:                                                    #FIXME
@@ -359,7 +360,7 @@ class SimilarityCache(OldSimilarityCache):
         log_it("get_similarity() called for files: %s" % [one, two], 5)
         if one > two:
             one, two = two, one
-        if self._calculation_times[os.path.basename(one)][os.path.basename(two)] < 0:
+        if np.isnan(self._calculation_times[os.path.basename(one)][os.path.basename(two)]):
             log_it("  ... not found in cache! Calculating and caching ...", 6)
             return self.calculate_similarity(one, two)
         if self._calculation_times[os.path.basename(one)][os.path.basename(two)] < os.path.getmtime(one):
