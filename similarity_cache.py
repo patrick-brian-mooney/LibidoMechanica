@@ -284,8 +284,8 @@ class SimilarityCache(OldSimilarityCache):
             self._calculation_times = pd.DataFrame(np.full((len(poem_files), len(poem_files)), np.nan, dtype="float64"), index=poem_files, columns=poem_files)
 
     def __str__(self):
-        try:                                                    #FIXME
-            return "< (new-style) Textual Similarity Cache, with %d results cached >" % len(self._data)
+        try:
+            return "< (new-style) Textual Similarity Cache, with %d results cached >" % sum(self._similarity_data.count())
         except AttributeError:
             return "< (new-style) Textual Similarity Cache (not fully initialized: no data attached) >"
         except BaseException as err:
