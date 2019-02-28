@@ -17,7 +17,6 @@ import bz2, functools, glob, os, pickle, time
 
 import pid                                              # https://pypi.python.org/pypi/pid/
 import pandas as pd                                     # https://pandas.pydata.org/
-import numpy as np                                      # http://www.numpy.org/
 
 
 from utils import *
@@ -183,9 +182,9 @@ class SimilarityCache(object):
         """
         log_it("Building cache ...")
         for i, first_text in enumerate(sorted(glob.glob(os.path.join(poetry_corpus, '*')))):
-            if i % 10 == 0:
+            if i % 5 == 0:
                 log_it("  We've performed full calculations for %d texts!" % i)
-                if i % 20 == 0:
+                if i % 10 == 0:
                     while self._dirty:
                         try:
                             with pid.PidFile(piddir=home_dir):
@@ -230,6 +229,134 @@ class SimilarityCache(object):
             log_it("Cache updated!")
 
 
+class NewSimilarityCache(SimilarityCache):
+    """This SimilarityCache subclass uses a pair of pandas
+    """
+    _instance = None
+
+    def __new__(cls, *pargs, **kwargs):
+        """Enforce the requirement that this be a singleton class"""
+        if not cls._instance:
+            cls._instance = SimilarityCache.__new__(cls)
+        return cls._instance
+
+    def __init__(self, cache_file=similarity_cache_location):
+        """Set up a new instance of this object. There should only ever be one.
+        Try to read in cached data if it exists in the expected location. If not,
+        create a new blank cache.
+        """
+        self._dirty = False
+        self._cache_file = cache_file
+        try:
+            with bz2.open(self._cache_file, mode='rb') as pickled_file:
+                self._similarity_data = pickle.load(pickled_file)
+                self._calculation_times = pickle.load(pickled_file)
+        except BaseException as err:
+            log_it("WARNING! Unable to decode similarity cache because %s. Creating new from scratch ..." % err)
+            self._similarity_data = pd.Series(dict(), dtype="float16")
+            self._calculation_times = pd.Series(dict(), dtype="float64")
+
+    def __repr__(self):
+        try:
+            return "< (new-style) Textual Similarity Cache, with %d results cached >" % self._similarity_data.size
+        except AttributeError:
+            return "< (new-style) Textual Similarity Cache (not fully initialized: no data attached) >"
+        except BaseException as err:
+            return "< (new-style) Textual Similarity Cache (unknown state because [ %s ]) >" % err
+
+    def clean_cache(self):
+        raise NotImplementedError("#FIXME: cleaning the cache is not yet implemented for the new-style similarity cache!")
+
+    def flush_cache(self):
+        """Writes the textual similarity cache to disk, if self._dirty is True. If
+        self._dirty is False, it silently returns without doing anything.
+
+        #FIXME: This function does not do any file locking; there's nothing preventing
+        multiple attempts to update the cache at the same time. The convention for
+        reducing this problem is that any code, before calling flush_cache(), must
+        acquire a PidFile lock distinct from the one the main script acquires before
+        beginning its run. Code that needs to write to the cache needs to repeatedly
+        attempt to acquire this lock, waiting in between failed attempts, until it is
+        able to do so. See .build_cache() for an example.
+        """
+        if not self._dirty:
+            log_it("Skipping cache update: no changes made!", 4)
+            return
+        log_it("Updating similarity data cache on disk ...", 3)
+        with bz2.open(self._cache_file, 'wb') as pickled_file:
+            pickle.dump(self._similarity_data, pickled_file)
+            pickle.dump(self._calculation_times, pickled_file)
+        log_it(" ... updated successfully!", 3)
+        self._dirty = False
+
+    @staticmethod
+    def _key_name_from_text_names(one, two):
+        """Takes ONE and TWo (filenames of source texts) and produces a normalized key
+        used to index the similarity cache to find or store the similarity between those
+        two texts. Returns a string, which is that key.
+
+        Uses two squiggle arrows pointing in opposite directions as a separator, because
+        that currently seems to be highly unlikely to occur in the titles of source
+        texts.
+        """
+        one = os.path.basename(one.strip())
+        two = os.path.basename(two.strip())
+        if one > two:
+            one, two = two, one
+        return """%s⇜⇝%s""" % (one, two)
+
+    def _store_similarity(self, one, two, similarity):
+        """Stores the SIMILARITY (a floating-point number between zero and one, heavily
+        weighted toward 0) between ONE and TWO (filenames for texts being compared) in
+        the data frames that keep data for this cache. The cache also stores a timestamp
+        for when the calculation was performed, which is not passed to this function.
+        Instead, the current time is used, on the assumption that the calculation has
+        JUST been performed. This could in theory cause unknown stale data in the cache,
+        if the source text is updated between when the calculation has been performed
+        and the time when the timestamp is finally recorded, but oh well: in this case,
+        the gap is generally quite small, in fact, and the implications of stale data
+        here are quite small--just that similarity calculations may be using slightly
+        incorrect data. Since major updates to source texts are unlikely (we're never
+        going to replace the text of 'The Rime of the Ancient Mariner' with the text of
+        'The Sick Rose', though we might occasionally correct spelling or punctuation),
+        large changes to similarity numbers are also unlikely. We can live with a small,
+        unlikely race condition here.
+
+        This function makes no attempt to check whether there is already data stored
+        for that key.
+        """
+        key = self._key_name_from_text_names(one, two)
+        self._similarity_data[key] = similarity
+        self._calculation_times = time.time()
+        self._dirty = True
+
+    def calculate_similarity(self, one, two, markov_length=5):
+        log_it("calculate_similarity() called for: %s" % [one, two], 5)
+        if one == two:
+            return 1                        # Well, that's easy.
+        chains_one = get_mappings(one, markov_length)
+        chains_two = get_mappings(two, markov_length)
+        ret = self.calculate_overlap(chains_one, chains_two) * self.calculate_overlap(chains_two, chains_one)
+        self._store_similarity(one, two, ret)
+        return ret
+
+    def get_similarity(self, one, two):
+        key = self._key_name_from_text_names(one, two)
+        if not key in self._similarity_data:
+            log_it("  ... not found in cache! Calculating and caching ...", 6)
+            return self.calculate_similarity(one, two)
+        if self._calculation_times[key] < os.path.getmtime(one):
+            log_it("  ... but cached data is stale relative to %s !" % one, 6)
+            return self.calculate_similarity(one, two)
+        if self._calculation_times[key] < os.path.getmtime(two):
+            log_it("  ... but cached data is stale relative to %s !" % two, 6)
+            return self.calculate_similarity(one, two)
+        log_it("  ... returning cached value!", 6)
+        return self._similarity_data[key]
+
+
+import numpy as np                                      # http://www.numpy.org/
+
 class BadSimilarityCache(SimilarityCache):
     """This SimilarityCache is a singleton object that manages the global cache of the
     results of similarity calculations. Calculating the similarity between two texts
@@ -253,6 +380,8 @@ class BadSimilarityCache(SimilarityCache):
       * self._calculation_times table of eight-byte floats encoding Unix timestamp
                                 for when calculation was performed. (Eight bytes are
                                 needed to keep the precision of the Unix timestamp.)
+
+    This SimilarityCache instance is VERY VERY SLOW.
     """
     _instance = None
 
@@ -285,14 +414,14 @@ class BadSimilarityCache(SimilarityCache):
 
     def __str__(self):
         try:
-            return "< (new-style) Textual Similarity Cache, with %d results cached >" % sum(self._similarity_data.count())
+            return "< (BAD-style) Textual Similarity Cache, with %d results cached >" % sum(self._similarity_data.count())
         except AttributeError:
-            return "< (new-style) Textual Similarity Cache (not fully initialized: no data attached) >"
+            return "< (BAD-style) Textual Similarity Cache (not fully initialized: no data attached) >"
         except BaseException as err:
-            return "< (new-style) Textual Similarity Cache (unknown state because %s) >" % err
+            return "< (BAD-style) Textual Similarity Cache (unknown state because %s) >" % err
 
     def clean_cache(self):
-        raise NotImplementedError("#FIXME: cleaning the cache is not yet implemented for the new-style similarity cache!")
+        raise NotImplementedError("#FIXME: cleaning the cache is not yet implemented for the slow-ass similarity cache!")
 
     def flush_cache(self):
         """Writes the textual similarity cache to disk, if self._dirty is True. If

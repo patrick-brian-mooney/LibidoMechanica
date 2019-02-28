@@ -72,15 +72,19 @@ fairly expensive calculation to make, especially when at least one of the texts
 being compared is long, and so the results of the calculation are cached
 between runs in a global similarity cache. This cache is opened, used and
 modified, and then updated on disk when the source text selections have been
-made. The class SimilarityCache() is a singleton class: creating one
-automatically reads the cache into memory as the _data attribute of the object
-being instantiated. Normally, this is probably best done with the convenience
-wrapper open_cache(), which is a context manager that ensures the cache is
-written back to disk when it is done being used (and has quite likely been
-modified). The convenience function clean_cache() cleans stale data out of the
-cache; the convenience function build_cache() forces it to be fully populated
-with results for all texts in the training corpus (and takes a REALLY LONG TIME
-to run if the cache has not already been populated).
+made. There are several SimilarityCache classes, though only one is actually
+used by the current setup: older ones still exist in case any cache files
+created by them need to be read. All are singleton classes (and more recent
+ones make some attempt to enforce this, or at least to protect against
+erroneous spurious creations). Creating one automatically reads the cache
+into memory as an attribute of the object being instantiated. Normally, this is
+probably best done with the convenience wrapper open_cache(), which is a
+context manager that ensures the cache is written back to disk when it is done
+being used (and has quite likely been modified). The convenience function
+clean_cache() cleans stale data out of the cache; the convenience function
+build_cache() forces it to be fully populated with results for all texts in the
+training corpus (and takes a REALLY LONG TIME to run if the cache has not
+already been populated).
 
 This whole script is very much a rough draft and a work in progress. Many of
 the sub-tasks that this script accomplishes are accomplished in hacky and
@@ -98,7 +102,7 @@ LICENSE.md for more details.
 
 # Current list of things so annoying that they're likely to get priority in fixing:
 # * Deepening and diversifying the corpus is always a goal.
-# * Something is occasionally truncating poems early.
+# * Something is occasionally truncating poems early.           --FIXED?
 #   * It seems to be connected to the lax reduce-single-lines postprocessing schema.
 #   * Should start to passively diagnose problems like this by moving copies of their JSON archive data to folders
 #     that track instances of those problems.
@@ -115,7 +119,7 @@ LICENSE.md for more details.
 # * Tokenizing currently drops leading space, which shouldn't happen, actually.
 # * We should have CAPITALIZATION NORMALIZATION goin' on. In the output, I mean.
 #   * Also other formal things: patterns of leading space, e.g.
-# * When a title needs to be shortened, the current algorithm simply lops off a random number of tokens until the
+# * When a poem title needs to be shortened, the current algorithm simply lops off a random number of tokens until the
 #   phrase is short enough. This works sometimes, but also produces titles that, say, end with conjunctions an
 #   unpleasant amount of the time. It would be smarter to generate a parse tree for the relevant sentence,
 #   then grab an appropriate-length branch (or branches) from it.
@@ -129,7 +133,7 @@ LICENSE.md for more details.
 #   corpus from here, we would be well over 100MB in a single bzipped, already-pickle-compressed pickle file. That's
 #   super-unwieldy. Plus, having all of that in memory at once already causes occasional problems at this size. I
 #   need to learn some sort of simple database implementation before the corpus gets much bigger.
-# * The directory structure needs reworking, and this module needs to be split into smaller files.
+# * The directory structure needs reworking, and this module needs to be split into smaller files.   --WORKING
 #   * This probably implies a utils/ folder for secondary scripts, like check_corpus.py.
 #     * There will almost certainly be others.
 # * There's still trouble with intra-word apostrophes.
@@ -974,9 +978,10 @@ def build_cache():
     sys.exit(0)
 
 
-force_cache_update = False                  # Set this to True when needing to step through these in an IDE.
+force_cache_update = False                   # Set this to True to easily step through this in an IDE.
 if force_cache_update:
     build_cache()
+    sys.exit(0)
 
 
 if __name__ == "__main__":
