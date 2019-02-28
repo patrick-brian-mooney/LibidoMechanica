@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """generate.py creates the content at LibidoMechanica.tumblr.com, which is a
 blog consisting of automatically written "love poetry" created by this script.
@@ -796,7 +796,7 @@ def new_selection_method(available, similarity_cache):
     seed texts completely at random, then going through and adding to this small
     corpus by looking for "sufficiently similar" texts to texts already in the
     corpus. "Similarity" is here defined as "having a comparatively high number
-    of overlapping chains" as the text it's being compared to. A text as similarity
+    of overlapping chains" as the text it's being compared to. A text has similarity
     1.0 when compared to itself, and similarity 0.0 when it is compared to a text
     that generates no chains in common with it (something in a different script,
     say). Typically, two poems in English chosen more or less at random will have a

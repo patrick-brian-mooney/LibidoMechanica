@@ -33,7 +33,7 @@ def get_mappings(f, markov_length):
     return pg.PoemGenerator(training_texts=[f], markov_length=markov_length).chains.the_mapping
 
 
-class OldSimilarityCache(object):
+class SimilarityCache(object):
     """This class used to be the object that managed the global cache of text
     similarities. It was a clunky homebrew system and has been superseded by the
     (new) SimilarityCache. It is no longer used, but its code remains in case files
@@ -230,7 +230,7 @@ class OldSimilarityCache(object):
             log_it("Cache updated!")
 
 
-class SimilarityCache(OldSimilarityCache):
+class BadSimilarityCache(SimilarityCache):
     """This SimilarityCache is a singleton object that manages the global cache of the
     results of similarity calculations. Calculating the similarity between two texts
     is a comparatively time- and memory-intensive operation, so we cache the results
@@ -259,7 +259,7 @@ class SimilarityCache(OldSimilarityCache):
     def __new__(cls, *args, **kwargs):
         """Enforce the requirement that this be a singleton class"""
         if not cls._instance:
-            cls._instance = OldSimilarityCache.__new__(cls, *args, **kwargs)
+            cls._instance = SimilarityCache.__new__(cls, *args, **kwargs)
         return cls._instance
 
     def __init__(self, cache_file=similarity_cache_location):
@@ -377,7 +377,7 @@ class SimilarityCache(OldSimilarityCache):
 if __name__ == "__main__":
     # Debugging tests
     import random
-    c = SimilarityCache()
+    c = BadSimilarityCache()
     print(c)
     for i in range(100):
         a, b = random.choice(glob.glob(os.path.join(poetry_corpus, '*'))), random.choice(glob.glob(os.path.join(poetry_corpus, '*')))
