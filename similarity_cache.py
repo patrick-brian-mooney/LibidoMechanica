@@ -107,7 +107,7 @@ class SimilarityCache(object):
 
     @staticmethod
     def calculate_overlap(one, two):
-        """return the percentage of chains in dictionary ONE that are also in
+        """Returns the percentage of chains in dictionary ONE that are also in
         dictionary TWO.
         """
         overlap_count = 0
@@ -229,7 +229,7 @@ class SimilarityCache(object):
             log_it("Cache updated!")
 
 
-class NewSimilarityCache(SimilarityCache):
+class MemoryHogSimilarityCache(SimilarityCache):
     """This SimilarityCache subclass uses a pair of pandas
     """
     _instance = None
@@ -256,7 +256,7 @@ class NewSimilarityCache(SimilarityCache):
             self._similarity_data = pd.Series(dict(), dtype="float16")
             self._calculation_times = pd.Series(dict(), dtype="float64")
 
-    def __repr__(self):
+    def __str__(self):
         try:
             return "< (new-style) Textual Similarity Cache, with %d results cached >" % self._similarity_data.size
         except AttributeError:
@@ -265,7 +265,8 @@ class NewSimilarityCache(SimilarityCache):
             return "< (new-style) Textual Similarity Cache (unknown state because [ %s ]) >" % err
 
     def clean_cache(self):
-        raise NotImplementedError("#FIXME: cleaning the cache is not yet implemented for the new-style similarity cache!")
+        # raise NotImplementedError("#FIXME: cleaning the cache is not yet implemented for the new-style similarity cache!")
+        pass
 
     def flush_cache(self):
         """Writes the textual similarity cache to disk, if self._dirty is True. If
@@ -327,7 +328,7 @@ class NewSimilarityCache(SimilarityCache):
         """
         key = self._key_name_from_text_names(one, two)
         self._similarity_data[key] = similarity
-        self._calculation_times = time.time()
+        self._calculation_times[key] = time.time()
         self._dirty = True
 
     def calculate_similarity(self, one, two, markov_length=5):
@@ -355,9 +356,10 @@ class NewSimilarityCache(SimilarityCache):
         return self._similarity_data[key]
 
 
+# Numpy is only directly used by the following class.
 import numpy as np                                      # http://www.numpy.org/
 
-class BadSimilarityCache(SimilarityCache):
+class VerySlowSimilarityCache(SimilarityCache):
     """This SimilarityCache is a singleton object that manages the global cache of the
     results of similarity calculations. Calculating the similarity between two texts
     is a comparatively time- and memory-intensive operation, so we cache the results
@@ -506,7 +508,7 @@ class BadSimilarityCache(SimilarityCache):
 if __name__ == "__main__":
     # Debugging tests
     import random
-    c = BadSimilarityCache()
+    c = VerySlowSimilarityCache()
     print(c)
     for i in range(100):
         a, b = random.choice(glob.glob(os.path.join(poetry_corpus, '*'))), random.choice(glob.glob(os.path.join(poetry_corpus, '*')))

@@ -502,7 +502,7 @@ def regularize_form(the_poem):
                     except IndexError:                  # No more lines left? Just run to end of poem.
                         current_goal += sum([syllable_count(word) for word in tokenized_poem])
         if tokenized_poem:
-            raise RuntimeError("There is leftover material that has not been put into the new poem:")
+            raise RuntimeError("There is leftover material that has not been put into the new poem!")
         the_poem = ''.join(lines)
 
     # OK, now that we've rearranged words from one line to another, we modify the overall stanza form of the poem.
@@ -980,7 +980,9 @@ def build_cache():
 
 force_cache_update = False                   # Set this to True to easily step through this in an IDE.
 if force_cache_update:
+    log_it("force_cache_update is True in source; fully populating cache ...")
     build_cache()
+    log_it("update complete, quitting ...")
     sys.exit(0)
 
 
