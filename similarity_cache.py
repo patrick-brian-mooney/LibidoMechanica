@@ -98,7 +98,7 @@ class BasicSimilarityCache(object):
         except (OSError, EOFError, pickle.PicklingError) as err:
             log_it("Not able to update previous data: %s" % err)
         except BaseException as err:
-            log_it("Unhandled exception occurred!   %s" % err)
+            log_it("Unhandled exception occurred during cache file update!   %s" % err)
         with bz2.open(self._cache_file, 'wb') as pickled_file:
             pickle.dump(self._data, pickled_file, protocol=pickle.HIGHEST_PROTOCOL)
         log_it(" ... updated!", 3)
@@ -243,6 +243,11 @@ class IndexedArraySimilarityCache(BasicSimilarityCache):
             cls._instance = BasicSimilarityCache.__new__(cls)
         return cls._instance
 
+    @staticmethod
+    def _yielder(value, num_times):
+        for i in range(num_times):
+            yield value
+
     def __init__(self, cache_file=similarity_cache_location):
         self._dirty = False
         self._cache_file = cache_file
@@ -257,11 +262,18 @@ class IndexedArraySimilarityCache(BasicSimilarityCache):
             self._similarity_data = array.array('f')
             self._calculation_times = array.array('d')
 
+        # Next: if there's not enough space in the underlying arrays, extend them now with empty data that compresses easily.
+        num_poems = len(glob.glob(os.path.join(poetry_corpus, '*')))
+        if len(self._similarity_data) < (num_poems ** 2) / 2:
+            self._similarity_data.extend(self._yielder(-1, ((num_poems ** 2) // 2) - len(self._similarity_data)))
+        if len(self._calculation_times) < (num_poems ** 2) / 2:
+            self._calculation_times.extend(self._yielder(-1, ((num_poems ** 2) // 2) - len(self._calculation_times)))
+
     def __str__(self):
         try:
             return "< (new-style) Textual Similarity Cache, with %d results cached >" % len(self._index)
         except AttributeError:
-            return "< (new-style) Textual Similarity Cache (not fully initialized: no data attached) >"
+            return "< (new-style) Textual Similarity Cache (not fully initialized: no index!) >"
         except BaseException as err:
             return "< (new-style) Textual Similarity Cache (unknown state because [ %s ]) >" % err
 
@@ -308,9 +320,11 @@ class IndexedArraySimilarityCache(BasicSimilarityCache):
         current_index = self._index_from_key(key)
         if not current_index:
             self._index.append(key)
-            self._similarity_data.append(0)
-            self._calculation_times.append(0)
-            current_index = len(self._index) - 1
+            if len(self._index) > len(self._similarity_data):       # Make room for new data
+                self._similarity_data.append(-1)
+            if len(self._index) > len(self._calculation_times):     # But only if necessary
+                self._calculation_times.append(0)
+            current_index = len(self._index) - 1    # reminder: zero-based
         self._similarity_data[current_index] = similarity
         self._calculation_times[current_index] = time.time()
         self._dirty = True
@@ -359,11 +373,11 @@ import pandas as pd                                     # https://pandas.pydata.
 
 class MemoryHogSimilarityCache(BasicSimilarityCache):
     """This BasicSimilarityCache subclass uses a pair of pandas Series to store the
-    relevant data. Turns out that pandas dataframs are slow to resize, and multiple
-    insertions and data accesses are slow, too, largely because the data is not
-    stored efficiently.
+    relevant data. Turns out that pandas dataframes are slow to resize, and multiple
+    insertions and data accesses are slow, too, largely (I suspect) because the data
+    is not stored efficiently.
 
-    Pickling is also fiddly.
+    Pickling is also fiddly. Giving up on this.
     """
     _instance = None
 
