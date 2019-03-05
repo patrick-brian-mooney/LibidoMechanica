@@ -271,11 +271,11 @@ class IndexedArraySimilarityCache(BasicSimilarityCache):
 
     def __str__(self):
         try:
-            return "< (new-style) Textual Similarity Cache, with %d results cached >" % len(self._index)
+            return "< IndexedArray Textual Similarity Cache, with %d results cached >" % len(self._index)
         except AttributeError:
-            return "< (new-style) Textual Similarity Cache (not fully initialized: no index!) >"
+            return "< IndexedArray Textual Similarity Cache (not fully initialized: no index!) >"
         except BaseException as err:
-            return "< (new-style) Textual Similarity Cache (unknown state because [ %s ]) >" % err
+            return "< IndexedArray Textual Similarity Cache (unknown state because [ %s ]) >" % err
 
     @staticmethod
     def _key_name_from_text_names(one, two):
@@ -357,6 +357,54 @@ class IndexedArraySimilarityCache(BasicSimilarityCache):
     def clean_cache(self):
         # raise NotImplementedError("#FIXME: cleaning the cache is not yet implemented for the new-style similarity cache!")
         pass
+
+
+class DictIndexedArraySimilarityCache(IndexedArraySimilarityCache):
+    def __init__(self, cache_file=similarity_cache_location):
+        self._dirty = False
+        self._cache_file = cache_file
+        try:
+            with bz2.open(self._cache_file, mode="rb") as pickled_file:
+                self._index = pickle.load(pickled_file)
+                self._similarity_data = pickle.load(pickled_file)
+                self._calculation_times = pickle.load(pickled_file)
+        except BaseException as err:
+            log_it("WARNING! Unable to decode similarity cache because %s. Creating new from scratch ..." % err)
+            self._index = dict()
+            self._similarity_data = array.array('f')
+            self._calculation_times = array.array('d')
+
+        # Next: if there's not enough space in the underlying arrays, extend them now with empty data that compresses easily.
+        num_poems = len(glob.glob(os.path.join(poetry_corpus, '*')))
+        if len(self._similarity_data) < (num_poems ** 2) / 2:
+            self._similarity_data.extend(self._yielder(-1, ((num_poems ** 2) // 2) - len(self._similarity_data)))
+        if len(self._calculation_times) < (num_poems ** 2) / 2:
+            self._calculation_times.extend(self._yielder(-1, ((num_poems ** 2) // 2) - len(self._calculation_times)))
+
+    def __str__(self):
+        try:
+            return "< DictIndexedArray Textual Similarity Cache, with %d results cached >" % len(self._index)
+        except AttributeError:
+            return "< DictIndexedArray Textual Similarity Cache (not fully initialized: no index!) >"
+        except BaseException as err:
+            return "< DictIndexedArray Textual Similarity Cache (unknown state because [ %s ]) >" % err
+
+    @staticmethod
+    def _key_from_text_names(one, two):
+        """Takes ONE and TWO (filenames of source texts) and produces a normalized key
+        used to index the similarity cache to find or store the similarity between those
+        two texts. Returns a string, which is that key.
+
+        Uses two squiggle arrows pointing in opposite directions as a separator, because
+        that currently seems to be highly unlikely to occur in the titles of source
+        texts.
+        """
+        one = os.path.basename(one.strip())
+        two = os.path.basename(two.strip())
+        if one > two:
+            one, two = two, one
+        return (one, two)
+
 
 
 class CurrentSimilarityCache(IndexedArraySimilarityCache):
