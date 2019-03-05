@@ -55,7 +55,7 @@ class BasicSimilarityCache(object):
         self._dirty = False
         self._cache_file = cache_file
 
-    def __str__(self):
+    def __repr__(self):
         try:
             return "< Textual Similarity Cache, with %d results cached >" % len(self._data)
         except AttributeError:
@@ -269,7 +269,7 @@ class IndexedArraySimilarityCache(BasicSimilarityCache):
         if len(self._calculation_times) < (num_poems ** 2) / 2:
             self._calculation_times.extend(self._yielder(-1, ((num_poems ** 2) // 2) - len(self._calculation_times)))
 
-    def __str__(self):
+    def __repr__(self):
         try:
             return "< IndexedArray Textual Similarity Cache, with %d results cached >" % len(self._index)
         except AttributeError:
@@ -379,9 +379,9 @@ class DictIndexedArraySimilarityCache(IndexedArraySimilarityCache):
         if len(self._similarity_data) < (num_poems ** 2) / 2:
             self._similarity_data.extend(self._yielder(-1, ((num_poems ** 2) // 2) - len(self._similarity_data)))
         if len(self._calculation_times) < (num_poems ** 2) / 2:
-            self._calculation_times.extend(self._yielder(-1, ((num_poems ** 2) // 2) - len(self._calculation_times)))
+            self._calculation_times.extend(self._yielder(0, ((num_poems ** 2) // 2) - len(self._calculation_times)))
 
-    def __str__(self):
+    def __repr__(self):
         try:
             return "< DictIndexedArray Textual Similarity Cache, with %d results cached >" % len(self._index)
         except AttributeError:
@@ -393,11 +393,7 @@ class DictIndexedArraySimilarityCache(IndexedArraySimilarityCache):
     def _key_from_text_names(one, two):
         """Takes ONE and TWO (filenames of source texts) and produces a normalized key
         used to index the similarity cache to find or store the similarity between those
-        two texts. Returns a string, which is that key.
-
-        Uses two squiggle arrows pointing in opposite directions as a separator, because
-        that currently seems to be highly unlikely to occur in the titles of source
-        texts.
+        two texts. Returns a tuple, which is that key.
         """
         one = os.path.basename(one.strip())
         two = os.path.basename(two.strip())
@@ -405,9 +401,32 @@ class DictIndexedArraySimilarityCache(IndexedArraySimilarityCache):
             one, two = two, one
         return (one, two)
 
+    def _index_from_key(self, key):
+        """Checks SELF's _index attribute for KEY and returns its numeric index. This
+        numeric index is used to find data for KEY in self._similarity_data and
+        self._calculation_times. If KEY is not in self._index, returns None.
+        """
+        try:
+            return self._index[key]
+        except (KeyError, ):
+            return None
+
+    def _store_similarity(self, one, two, similarity):
+        key = self._key_name_from_text_names(one, two)
+        current_index = self._index_from_key(key)
+        if not current_index:
+            self._index[key] = 1 + max(self._index.values())
+            if len(self._index) > len(self._similarity_data):       # Make room for new data
+                self._similarity_data.append(-1)
+            if len(self._index) > len(self._calculation_times):     # But only if necessary
+                self._calculation_times.append(0)
+            current_index = len(self._index) - 1    # reminder: zero-based
+        self._similarity_data[current_index] = similarity
+        self._calculation_times[current_index] = time.time()
+        self._dirty = True
 
 
-class CurrentSimilarityCache(IndexedArraySimilarityCache):
+class CurrentSimilarityCache(DictIndexedArraySimilarityCache):
     """A subclass that inherits from whatever class we're currently using for the
     similarity cache without changing any of its behavior. Just a pointer to aid in
     managing this particular issue during development.
@@ -451,7 +470,7 @@ class MemoryHogSimilarityCache(BasicSimilarityCache):
             self._similarity_data = pd.Series(dict(), dtype="float16")
             self._calculation_times = pd.Series(dict(), dtype="float64")
 
-    def __str__(self):
+    def __repr__(self):
         try:
             return "< (MemoryHog) Textual Similarity Cache, with %d results cached >" % self._similarity_data.size
         except AttributeError:
@@ -609,7 +628,7 @@ class VerySlowSimilarityCache(BasicSimilarityCache):
             self._similarity_data = pd.DataFrame(np.full((len(poem_files), len(poem_files)), np.nan, dtype="float16"), index=poem_files, columns=poem_files)
             self._calculation_times = pd.DataFrame(np.full((len(poem_files), len(poem_files)), np.nan, dtype="float64"), index=poem_files, columns=poem_files)
 
-    def __str__(self):
+    def __repr__(self):
         try:
             return "< (BAD-style) Textual Similarity Cache, with %d results cached >" % sum(self._similarity_data.count())
         except AttributeError:
