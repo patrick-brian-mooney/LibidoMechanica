@@ -16,6 +16,7 @@ home_dir = '/LibidoMechanica'
 poetry_corpus = os.path.join(home_dir, 'poetry_corpus')
 post_archives = os.path.join(home_dir, 'archives')
 similarity_cache_location = os.path.join(home_dir, 'similarity_cache.pkl.bz2')
+sharded_cache_location = os.path.join(home_dir, 'cache')
 
 lock_file_dir = home_dir
 running_lock_name = 'running.pid'

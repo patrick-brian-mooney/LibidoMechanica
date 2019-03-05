@@ -72,7 +72,7 @@ fairly expensive calculation to make, especially when at least one of the texts
 being compared is long, and so the results of the calculation are cached
 between runs in a global similarity cache. This cache is opened, used and
 modified, and then updated on disk when the source text selections have been
-made. There are several SimilarityCache classes, though only one is actually
+made. There are several BasicSimilarityCache classes, though only one is actually
 used by the current setup: older ones still exist in case any cache files
 created by them need to be read. All are singleton classes (and more recent
 ones make some attempt to enforce this, or at least to protect against
@@ -153,7 +153,7 @@ from nltk.corpus import cmudict                         # nltk.org
 
 
 from utils import *
-from similarity_cache import SimilarityCache
+from similarity_cache import CurrentSimilarityCache
 
 
 import patrick_logger                                   # https://github.com/patrick-brian-mooney/personal-library
@@ -820,7 +820,7 @@ def new_selection_method(available, similarity_cache):
     calculation results between runs.
 
     AVAILABLE is the complete list of poems in the corpus.
-    SIMILARITY_CACHE is the already-loaded SimilarityCache object.
+    SIMILARITY_CACHE is the already-loaded BasicSimilarityCache object.
     """
     global post_data
 
@@ -885,7 +885,7 @@ def open_cache():
     while not opened:
         try:
             with pid.PidFile(piddir=lock_file_dir, pidname=updating_lock_name):
-                similarity_cache = SimilarityCache()
+                similarity_cache = CurrentSimilarityCache()
                 yield similarity_cache
                 opened = True
                 similarity_cache.flush_cache()
@@ -978,7 +978,7 @@ def build_cache():
     sys.exit(0)
 
 
-force_cache_update = False                   # Set this to True to easily step through this in an IDE.
+force_cache_update = False                  # Set this to True to easily step through this in an IDE.
 if force_cache_update:
     log_it("force_cache_update is True in source; fully populating cache ...")
     build_cache()
