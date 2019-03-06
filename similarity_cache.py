@@ -31,6 +31,12 @@ def get_mappings(f, markov_length):
     return pg.PoemGenerator(training_texts=[f], markov_length=markov_length).chains.the_mapping
 
 
+@functools.lru_cache(maxsize=2048)
+def _comparative_form(what):
+    """Get the standard form of a text's name for indexing lookup purposes."""
+    return os.path.basename(what.strip()).lower()
+
+
 class BasicSimilarityCache(object):
     """This class is the object that manages the global cache of text similarities.
     Subclasses of this class have not managed to improve on its performance, nor on
@@ -113,6 +119,23 @@ class BasicSimilarityCache(object):
             if which_chain in two: overlap_count += 1
         return overlap_count / len(one)
 
+    @staticmethod
+    def _key_from_texts(one, two):
+        """Given texts ONE and TWO, produce a hashable key that can be used to index the
+        _data dictionary.
+        """
+        one, two = _comparative_form(one), _comparative_form(two)
+        if one > two:
+            one, two = two, one
+        return (one, two)
+
+    def _store_data(self, one, two, similarity):
+        """Store the SIMILARITY (a float between 0 and 1, weighted toward zero)
+        between texts ONE and TWO in the cache.
+        """
+        key = self._key_from_texts(one, two)
+        self._data[key] = {'when': time.time(), 'similarity': similarity, }
+
     def calculate_similarity(self, one, two, markov_length=5):
         """Come up with a score evaluating how similar the two texts are to each other.
         This actually means, more specifically, "the product of (a) the percentage of
@@ -130,7 +153,7 @@ class BasicSimilarityCache(object):
         chains_one = get_mappings(one, markov_length)
         chains_two = get_mappings(two, markov_length)
         ret = self.calculate_overlap(chains_one, chains_two) * self.calculate_overlap(chains_two, chains_one)
-        self._data[tuple(sorted([os.path.basename(one), os.path.basename(two)]))] = {'when': time.time(), 'similarity': ret,}
+        self._store_data(one, two, ret)
         self._dirty = True
         return ret
 
@@ -150,18 +173,19 @@ class BasicSimilarityCache(object):
         function only takes advantage of the stored values.
         """
         # Index in lexicographical order, by actual filename, after dropping path
-        index = tuple(sorted([os.path.basename(one), os.path.basename(two)]))
-        log_it("get_similarity() called for files: %s" % list(index), 5)
+        key = self._key_from_texts(one, two)
+        log_it("get_similarity() called for files: %s" % list(key), 5)
 
-        if index in self._data:                       # If it's in the cache, and the data isn't stale ...
-            if self._data[index]['when'] < os.path.getmtime(one):
+        if key in self._data:                       # If it's in the cache, and the data isn't stale ...
+            entry = self._data[key]
+            if entry['when'] < os.path.getmtime(one):
                 log_it("  ... but cached data is stale relative to %s !" % one, 6)
                 return self.calculate_similarity(one, two)
-            if self._data[index]['when'] < os.path.getmtime(two):
+            if entry['when'] < os.path.getmtime(two):
                 log_it("  ... but cached data is stale relative to %s !" % two, 6)
                 return self.calculate_similarity(one, two)
             log_it(" ... returning cached value!", 6)
-            return self._data[index]['similarity']
+            return entry['similarity']
 
         log_it(" ... not found in cache! Calculating and cacheing ...", 6)
         return self.calculate_similarity(one, two)
@@ -251,6 +275,8 @@ class ChainMapSimilarityCache(BasicSimilarityCache):
     both the file size of individual files and the amount of memory required when
     decompressing.
     """
+    _maximum_shard_size = 256 * 1024
+
     def __init__(self):
         if not os.path.isdir(sharded_cache_location):
             log_it("Directory for storing similarity cache shards does not exist, creating ...")
@@ -263,7 +289,7 @@ class ChainMapSimilarityCache(BasicSimilarityCache):
                     shards.append(pickle.load(pickled_file))
             except (OSError, EOFError, AttributeError, pickle.PicklingError) as err:
                 log_it("WARNING! Unable to load cached similarity data because %s. Skipping this shard ..." % err)
-        self._data = DeepChainMap(shards)
+        self._data = DeepChainMap(*shards)
         self._dirty = False
 
     def __repr__(self):
@@ -283,12 +309,12 @@ class ChainMapSimilarityCache(BasicSimilarityCache):
         for shard_num, shard in enumerate(self._data.maps):
             try:
                 shard_name = os.path.join(sharded_cache_location, "%016d.dat" % shard_num)
-                log_it("Dumping %d items into shard with name %s") % (len(shard), shlex.quote(shard_name), 2)
+                log_it("      ... dumping %d items into shard with name %s" % (len(shard), shlex.quote(shard_name)), 2)
                 with bz2.open(shard_name, mode="wb") as pickled_file:
-                    pickle.dump(self._data, pickled_file, protocol=1)
+                    pickle.dump(shard, pickled_file, protocol=1)
                 shards_created.add(os.path.abspath(shard_name))
             except BaseException as err:
-                log_it("WARNING! Unable to dump shard at %s because %s. That data is lost!" % (shard_name, err))
+                log_it("WARNING! Unable to dump shard at %s because %s. That data is lost!" % (shlex.quote(shard_name), err))
         extra_shards = [os.path.abspath(i) for i in sorted(glob.glob(os.path.join(sharded_cache_location, "*"))) if os.path.abspath(i) not in shards_created]
         if extra_shards:
             log_it("WARNING: %d leftover shards detected in cache directory! Deleting ..." % len(extra_shards), 1)
@@ -299,11 +325,13 @@ class ChainMapSimilarityCache(BasicSimilarityCache):
                     os.unlink(f)
                 except BaseException as err:
                     log_it("WARNING! Unable to delete extraneous shard %s!" % f)
-        log_it(" ... updated!", 3)
+        log_it(" ... updated!", 1)
         self._dirty = False
 
-    def _store_data(self, one, two, similarity): pass
-
+    def _store_data(self, one, two, similarity):
+        if len(self._data.maps[0]) >= self._maximum_shard_size:
+            self._data = self._data.new_child()
+        BasicSimilarityCache._store_data(self, one, two, similarity)
 
 
 class IndexedArraySimilarityCache(BasicSimilarityCache):
@@ -511,7 +539,7 @@ class DictIndexedArraySimilarityCache(IndexedArraySimilarityCache):
         self._dirty = True
 
 
-class CurrentSimilarityCache(BasicSimilarityCache):
+class CurrentSimilarityCache(ChainMapSimilarityCache):
     """A subclass that inherits from whatever class we're currently using for the
     similarity cache without changing any of its behavior. Just a pointer to aid in
     managing this particular issue during development.
@@ -519,7 +547,7 @@ class CurrentSimilarityCache(BasicSimilarityCache):
     pass
 
 
-# pandas only used below, in deprecated class. Import it here.
+# pandas only used below, in deprecated class. Import it here instead of up top.
 import pandas as pd                                     # https://pandas.pydata.org/
 
 
@@ -807,7 +835,7 @@ class VerySlowSimilarityCache(BasicSimilarityCache):
 if __name__ == "__main__":
     # Debugging harness, for walking through in a debugger.
     import random
-    c = DictIndexedArraySimilarityCache(cache_file="""/LibidoMechanica/DictIndexed_similarity_cache.pkl.bz2""")
+    c = ChainMapSimilarityCache()
     print(c)
     c.build_cache()
     for i in range(5000):
