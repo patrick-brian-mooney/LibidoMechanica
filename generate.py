@@ -854,6 +854,8 @@ def new_selection_method(available, similarity_cache):
                 announced, last_count = set(ret), len(ret)
             else:
                 log_it("  ... %d selected texts in %d candidates" % (len(ret), candidates), 3)
+        if candidates % 1000 == 0:
+            if similarity_cache._dirty: similarity_cache.flush_cache()
     post_data["rejected training texts"] = candidates - len(ret)
     if similarity_cache._dirty: similarity_cache.flush_cache()
     return ret
