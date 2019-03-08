@@ -39,8 +39,9 @@ def _comparative_form(what):
 
 class BasicSimilarityCache(object):
     """This class is the object that manages the global cache of text similarities.
-    Subclasses of this class have not managed to improve on its performance, nor on
-    storage requirements while maintaining decent performance.
+    Most subclasses of this class have not managed to improve on its performance,
+    nor on requirements while maintaining decent performance (though see
+    ChainMapSimilarityCache for a good alternative implementation). 
 
     The object's internal data cache is a dictionary:
         { (text_name_one, text_name_two):         (a tuple)
@@ -301,6 +302,9 @@ class ChainMapSimilarityCache(BasicSimilarityCache):
             return "< Fragmented Textual Similarity Cache (unknown state because %s) >" % err
 
     def flush_cache(self):
+        """Flush the fragmented similarity cache to disk, each shard in a separate
+        compressed file. 
+        """
         if not self._dirty:
             log_it("Skipping cache update: no changes made!", 3)
             return
@@ -402,6 +406,7 @@ class IndexedArraySimilarityCache(BasicSimilarityCache):
         return """%s⇜⇝%s""" % (one, two)
 
     def flush_cache(self):
+        """Flush the cache to disk."""
         if not self._dirty:
             log_it("Skipping cache update: no changes made!", 4)
             return
@@ -424,6 +429,9 @@ class IndexedArraySimilarityCache(BasicSimilarityCache):
             return None
 
     def _store_similarity(self, one, two, similarity):
+        """Store the calculated SIMILARITY between texts ONE and TWO in the similarity
+        cache.
+        """
         key = self._key_name_from_text_names(one, two)
         current_index = self._index_from_key(key)
         if not current_index:
@@ -438,6 +446,7 @@ class IndexedArraySimilarityCache(BasicSimilarityCache):
         self._dirty = True
 
     def calculate_similarity(self, one, two, markov_length=5):
+        """Calculate the similarity between texts ONE and TWO, then cache the result."""
         log_it("calculate_similarity() called for: %s" % [one, two], 5)
         if os.path.basename(one.strip()) == os.path.basename(two.strip()):
             return 1                        # Well, that's easy.
@@ -448,6 +457,10 @@ class IndexedArraySimilarityCache(BasicSimilarityCache):
         return ret
 
     def get_similarity(self, one, two):
+        """If the similarity between texts ONE and TWO is cached, and the calculated value
+        is not stale, then return it. Otherwise, call calculate_similarity to calculate
+        and cache the similarity, then return it.
+        """
         key = self._key_name_from_text_names(one, two)
         index_num = self._index_from_key(key)
         if not index_num:
@@ -525,6 +538,8 @@ class DictIndexedArraySimilarityCache(IndexedArraySimilarityCache):
             return None
 
     def _store_similarity(self, one, two, similarity):
+        """Store the similarity in the cache, lengthening it if necessary.
+        """
         key = self._key_name_from_text_names(one, two)
         current_index = self._index_from_key(key)
         if not current_index:
@@ -710,7 +725,7 @@ class VerySlowSimilarityCache(BasicSimilarityCache):
                                 for when calculation was performed. (Eight bytes are
                                 needed to keep the precision of the Unix timestamp.)
 
-    This BasicSimilarityCache instance is VERY VERY SLOW.
+    This BasicSimilarityCache subclass is VERY VERY SLOW.
     """
     _instance = None
 
