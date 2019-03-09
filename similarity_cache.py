@@ -37,11 +37,18 @@ def _comparative_form(what):
     return os.path.basename(what.strip()).lower()
 
 
+def _all_poems_in_comparative_form():
+    """Get a dictionary mapping the comparative form of all poems currently in the
+    corpus to their full actual filename.
+    """
+    return {_comparative_form(p):os.path.abspath(p) for p in glob.glob(os.path.join(poetry_corpus, '*'))}
+
+
 class BasicSimilarityCache(object):
     """This class is the object that manages the global cache of text similarities.
     Most subclasses of this class have not managed to improve on its performance,
     nor on requirements while maintaining decent performance (though see
-    ChainMapSimilarityCache for a good alternative implementation). 
+    ChainMapSimilarityCache for a good alternative implementation).
 
     The object's internal data cache is a dictionary:
         { (text_name_one, text_name_two):         (a tuple)
@@ -207,7 +214,7 @@ class BasicSimilarityCache(object):
         for i, first_text in enumerate(sorted(glob.glob(os.path.join(poetry_corpus, '*')))):
             if i % 5 == 0:
                 log_it("  We've performed full calculations for %d texts!" % i)
-                if i % 10 == 0:
+                if i % 20 == 0:
                     while self._dirty:
                         try:
                             with pid.PidFile(piddir=home_dir):
@@ -251,16 +258,23 @@ class BasicSimilarityCache(object):
             log_it("Cache updated!")
 
 
-class DeepChainMap(collections.ChainMap):
+class ShardedChainMap(collections.ChainMap):
     """Variant of ChainMap that allows direct updates to inner scopes. Shamelessly
     stolen from the Python documentation for the collections module in the standard
     library, then further adapted.
     """
+    _maximum_shard_size = 256 * 1024
+
     def __setitem__(self, key, value):
-        for mapping in self.maps:
+        for mapping in self.maps:                           # If it's already in one of the underlying dicts, update it
             if key in mapping:
                 mapping[key] = value
                 return
+        for mapping in self.maps:
+            if len(mapping) <= self._maximum_shard_size:    # Otherwise, find a non-full shard to add it to if possible
+                mapping[key] = value
+                return
+        self.maps = [dict()] + self.maps                    # Otherwise, create a new shard and use it to store the value
         self.maps[0][key] = value
 
     def __delitem__(self, key):
@@ -276,8 +290,6 @@ class ChainMapSimilarityCache(BasicSimilarityCache):
     both the file size of individual files and the amount of memory required when
     decompressing.
     """
-    _maximum_shard_size = 256 * 1024
-
     def __init__(self):
         if not os.path.isdir(sharded_cache_location):
             log_it("Directory for storing similarity cache shards does not exist, creating ...")
@@ -290,7 +302,7 @@ class ChainMapSimilarityCache(BasicSimilarityCache):
                     shards.append(pickle.load(pickled_file))
             except (OSError, EOFError, AttributeError, pickle.PicklingError) as err:
                 log_it("WARNING! Unable to load cached similarity data because %s. Skipping this shard ..." % err)
-        self._data = DeepChainMap(*shards)
+        self._data = ShardedChainMap(*shards)
         self._dirty = False
 
     def __repr__(self):
@@ -303,7 +315,7 @@ class ChainMapSimilarityCache(BasicSimilarityCache):
 
     def flush_cache(self):
         """Flush the fragmented similarity cache to disk, each shard in a separate
-        compressed file. 
+        compressed file.
         """
         if not self._dirty:
             log_it("Skipping cache update: no changes made!", 3)
@@ -332,10 +344,36 @@ class ChainMapSimilarityCache(BasicSimilarityCache):
         log_it(" ... updated!", 1)
         self._dirty = False
 
-    def _store_data(self, one, two, similarity):
-        if len(self._data.maps[0]) >= self._maximum_shard_size:
-            self._data = self._data.new_child()
-        BasicSimilarityCache._store_data(self, one, two, similarity)
+    def clean_cache(self):
+        """Clean out stale and malformed data from the cache, then write it back to disk.
+        Goes the entire sharded dictionary, key by key, building a new dictionary of
+        validated items, then swaps that in and flushes the data to disk.
+        """
+        current_texts = _all_poems_in_comparative_form()
+        entries_validated = 0
+        pruned = ShardedChainMap()
+        for key in self._data:
+            try:
+                assert key not in pruned, "Duplicate key [ %s ] found! ... cleaning." % (key, )
+                one, two = key
+                assert one <= two, "texts in key %s are mis-ordered!" % list(key)
+                assert one in current_texts, "%s no longer exists on disk!" % one
+                assert two in current_texts, "%s no longer exists on disk!" % two
+                assert self._data[key]['when'] >= os.path.getmtime(current_texts[one]), "data for '%s' is stale!" % current_texts[one]
+                assert self._data[key]['when'] >= os.path.getmtime(current_texts[two]), "data for '%s' is stale!" % current_texts[two]
+                _ = float(self._data[key]['when'])
+                # If we made it this far ...
+                pruned[key] = self._data[key]
+            except (AssertionError, ValueError, KeyError, OSError) as err:
+                log_it("Removing entry: [ %s ]    -- because: %s" % (key, err))
+                self._dirty = True
+            entries_validated += 1
+            if entries_validated % 1000 == 0:
+                log_it("We've validated %d entries, that's %.04f%%!" % (entries_validated, 100*(entries_validated/len(self._data))))
+        entries_cleaned = len(pruned) - len(self._data)
+        log_it("DONE! Eliminated %d stale entries (that's %.04f%%)." % (entries_cleaned, 100 * (entries_cleaned/len(self._data))))
+        self._data = pruned
+        self.flush_cache()
 
 
 class IndexedArraySimilarityCache(BasicSimilarityCache):
@@ -476,8 +514,7 @@ class IndexedArraySimilarityCache(BasicSimilarityCache):
         return self._similarity_data[index_num]
 
     def clean_cache(self):
-        # raise NotImplementedError("#FIXME: cleaning the cache is not yet implemented for the new-style similarity cache!")
-        pass
+        raise NotImplementedError("#FIXME: cleaning the cache is not yet implemented for the indexed-array similarity cache!")
 
 
 class DictIndexedArraySimilarityCache(IndexedArraySimilarityCache):
@@ -557,7 +594,7 @@ class DictIndexedArraySimilarityCache(IndexedArraySimilarityCache):
 class CurrentSimilarityCache(ChainMapSimilarityCache):
     """A subclass that inherits from whatever class we're currently using for the
     similarity cache without changing any of its behavior. Just a pointer to aid in
-    managing this particular issue during development.
+    managing this particular issue during development experiments.
     """
     pass
 
@@ -607,8 +644,7 @@ class MemoryHogSimilarityCache(BasicSimilarityCache):
             return "< (MemoryHog) Textual Similarity Cache (unknown state because [ %s ]) >" % err
 
     def clean_cache(self):
-        # raise NotImplementedError("#FIXME: cleaning the cache is not yet implemented for the memory-hog-style similarity cache!")
-        pass
+        raise NotImplementedError("#FIXME: cleaning the cache is not yet implemented for the memory-hog-style similarity cache!")
 
     def flush_cache(self):
         """Writes the textual similarity cache to disk, if self._dirty is True. If
@@ -848,12 +884,18 @@ class VerySlowSimilarityCache(BasicSimilarityCache):
 
 
 if __name__ == "__main__":
-    # Debugging harness, for walking through in a debugger.
-    import random
-    c = ChainMapSimilarityCache()
+    # Debugging harness, for walking through in an IDE.
+    import patrick_logger
+    patrick_logger.verbosity_level = 3
+
+    c = CurrentSimilarityCache()
     print(c)
+    c.clean_cache()
     c.build_cache()
+
+    import random
     for i in range(5000):
         a, b = random.choice(glob.glob(os.path.join(poetry_corpus, '*'))), random.choice(glob.glob(os.path.join(poetry_corpus, '*')))
         print("Similarity between %s and %s is: %.4f" % (os.path.basename(a), os.path.basename(b), c.get_similarity(a,b)))
+
     c.flush_cache()
