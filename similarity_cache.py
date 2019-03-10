@@ -263,7 +263,7 @@ class ShardedChainMap(collections.ChainMap):
     stolen from the Python documentation for the collections module in the standard
     library, then further adapted.
     """
-    _maximum_shard_size = 256 * 1024
+    _maximum_shard_size = 2 ** 16
 
     def __setitem__(self, key, value):
         for mapping in self.maps:                           # If it's already in one of the underlying dicts, update it
@@ -271,7 +271,7 @@ class ShardedChainMap(collections.ChainMap):
                 mapping[key] = value
                 return
         for mapping in self.maps:
-            if len(mapping) <= self._maximum_shard_size:    # Otherwise, find a non-full shard to add it to if possible
+            if len(mapping) < self._maximum_shard_size:    # Otherwise, find a non-full shard to add it to if possible
                 mapping[key] = value
                 return
         self.maps = [dict()] + self.maps                    # Otherwise, create a new shard and use it to store the value
