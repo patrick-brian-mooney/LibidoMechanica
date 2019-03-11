@@ -145,15 +145,15 @@ LICENSE.md for more details.
 
 
 import bz2, contextlib, datetime, functools, glob, json, os
-import pprint, random, re, string, sys, time, unicodedata
+import pprint, random, re, shlex, string, sys, time, unicodedata
 
 import pid                                              # https://pypi.python.org/pypi/pid/
 
 from nltk.corpus import cmudict                         # nltk.org
 
 
-from utils import *
-from similarity_cache import CurrentSimilarityCache
+from utils import *                                     # Filesystem structure, etc.
+from similarity_cache import CurrentSimilarityCache     # Cache of calculated textual similarities.
 
 
 import patrick_logger                                   # https://github.com/patrick-brian-mooney/personal-library
@@ -235,17 +235,18 @@ def syllable_count(word):
     try:
         return sum([len(list(y for y in x if y[-1].isdigit())) for x in syllable_dict[w.lower()]])
     except KeyError as err:
+        log_it("Word %s is apparently not in CMUDict: %s" % (shlex.quote(word), err), 5)
         return manually_count_syllables(w)
 
 def is_prime(n):
-        """Return True if N is prime, false otherwise. "Prime" is here defined specifically
-        as "has fewer than three factors," which is not quite the same as mathematical
-        ... um, primery. Primeness. Anyway, this is intended to be inclusive about edge
-        cases that "is it prime?" should often include (at least for the purposes of
-        this particular project) rather than be an exact mathematically correct test.
-        """
-        assert (int(n) == n and n >= 1), "ERROR: is_prime() called on %s, which is not a positive integer" % n
-        return (len(factors(n)) < 3)
+    """Return True if N is prime, false otherwise. "Prime" is here defined specifically
+    as "has fewer than three factors," which is not quite the same as mathematical
+    ... um, primery. Primeness. Anyway, this is intended to be inclusive about edge
+    cases that "is it prime?" should often include (at least for the purposes of
+    this particular project) rather than be an exact mathematically correct test.
+    """
+    assert (int(n) == n and n >= 1), "ERROR: is_prime() called on %s, which is not a positive integer" % n
+    return (len(factors(n)) < 3)
 
 
 def lines_without_stanza_breaks(the_poem):
@@ -960,6 +961,8 @@ def main():
         new_folder = os.path.join(post_archives, "%03d" % (1 + int(os.path.basename(last_folder))))
         os.mkdir(new_folder)
         last_folder = new_folder
+        with open_cache() as similarity_cache:              # Every thousand poems, clean out the cache.
+            similarity_cache.clean_cache()
     with bz2.BZ2File(os.path.join(last_folder, archive_name), mode='wb') as archive_file:
         archive_file.write(json.dumps(post_data, sort_keys=True, indent=3, ensure_ascii=False).encode())
     log_it("INFO: We're done")
