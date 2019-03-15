@@ -852,8 +852,9 @@ class VerySlowSimilarityCache(BasicSimilarityCache):
 
     def get_similarity(self, one, two):
         """Checks to see if the similarity between ONE and TWO is already known. If it is,
-        returns that similarity. Otherwise, calculates the similarity and stores it in
-        the global similarity cache, which is written at the end of the script's run.
+        returns that similarity from the cache. Otherwise, calculates the similarity and
+        stores it in the global similarity cache, which is written at the end of the
+        script's run.
 
         In short, this function takes advantage of the memoization of
         calculate_similarity, also taking taking advantage of the fact that

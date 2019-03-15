@@ -172,6 +172,9 @@ import text_handling as th                              # https://github.com/pat
 patrick_logger.verbosity_level = 3
 
 known_punctuation = string.punctuation + "‘’“”"
+open_quotes = ("‘", "“")
+close_quotes = ("’", "”")
+
 syllable_dict = cmudict.dict()
 
 
@@ -189,7 +192,7 @@ def print_usage(exit_code=0):
     """Print the docstring as a usage message to stdout, then quit with status code
     EXIT_CODE.
     """
-    log_it("INFO: print_usage() was called")
+    log_it("INFO: print_usage() was called", 4)
     print(__doc__)
     sys.exit(exit_code)
 
@@ -550,8 +553,168 @@ def count_previous_untitled_poems():
     log_it("Counted previous untitled poems: %d" % ret, 4)
     return ret
 
+def balance_punctuation(the_poem, opening_char, closing_char):
+    """Makes sure that paired punctuation (smart quotes, parentheses, brackets) in the
+    poem are 'balanced.' If not, it attempts to correct it.
+    """
+    opening, closing = the_poem.count(opening_char), the_poem.count(closing_char)
+    if closing_char == '’':     # Sigh. We have to worry about apostrophes that look like closing single quotes.
+        closing -= len(re.findall('[:alnum:]*’[:alnum:]', the_poem))    # Inside a word? It's an apostrophe. Don't count it
+
+    log_it("INFO: Balancing %s and %s (%d/%d)" % (opening_char, closing_char, opening, closing), 2)
+
+    if opening or closing:      # Do nothing if there's no instances of either character
+        if opening != closing:  # Do nothing if we already have equal numbers (even if not properly "balanced")
+            nesting_level = 0   # How many levels deep are we right now in the punctuation we're tracking?
+            indexed_poem = list(the_poem)
+            index = 0
+            while index <= (len(indexed_poem)-1):
+                char = indexed_poem[index]
+                next_char = '' if index == len(indexed_poem) -1 else indexed_poem[index + 1]
+                last_char = '' if index == 0 else indexed_poem[index - 1]
+                if index == (len(indexed_poem)-1) :  # End of the poem?
+                    if nesting_level > 0:               # Close any open characters.
+                        indexed_poem += [closing_char]
+                        nesting_level -= 1
+                    index += 1
+                elif char == opening_char:          # Opening character?
+                    if index == len(indexed_poem):      # Last character is an opening character?
+                        indexed_poem.pop(-1)            # Just drop it.
+                    else:
+                        nesting_level += 1              # We're one level deeper
+                        index += 1                          # Move on to next character
+                elif char == closing_char:          # Closing character?
+                    if (closing_char == '’') and (th.is_alphanumeric(next_char) and th.is_alphanumeric(last_char)):
+                        index += 1      # Skip apostrophes in the middle of words
+                    else:
+                        if nesting_level < 1:               # Are we trying to close something that's not open?
+                            indexed_poem.pop(index)         # Just drop the spurious close quote
+                        else:
+                            if next_char.isspace():             # Avoid non-quote apostrophes in middle of words.
+                                nesting_level -= 1          # We're one level less deep
+                            index += 1                      # Move on to next character
+                elif nesting_level > 0:             # Are we currently in the middle of a bracketed block?
+                    if next_char.isspace():             # Is the next character whitespace?
+                        if random.random() < (0.001 * nesting_level):   # Low chance of closing the open bracket
+                            indexed_poem.insert(index, closing_char)
+                            nesting_level -= 1
+                    elif char in ['.', '?', '!'] and next_char.isspace():
+                        if random.random() < (0.05 * nesting_level):    # Higher chance of closing the open bracketer
+                            indexed_poem.insert(index, closing_char)
+                            nesting_level -= 1
+                            if random.random() < 0.2:                       # Force new paragraph break?
+                                indexed_poem.insert(index + 1, '\n')
+                    elif char in known_punctuation and last_char in ['.', '!', '?']:
+                        if random.random() < (0.05 * nesting_level):
+                            indexed_poem.insert(index, closing_char)
+                            nesting_level -= 1
+                            if random.random() < 0.2:                       # Force new paragraph break?
+                                indexed_poem.insert(index + 1, '\n')
+                    elif char == '\n' and next_char == '\n':            # Very high chance of closing on paragraph boundaries
+                        if random.random() < (0.4 * nesting_level):
+                            indexed_poem.insert(index, closing_char)
+                            nesting_level -= 1
+                    elif char == '\n':
+                        if random.random() < (0.1 * nesting_level):
+                            indexed_poem.insert(index, closing_char)
+                            nesting_level -= 1
+                    index += 1
+                else:
+                    index += 1
+            the_poem = ''.join(indexed_poem)
+    log_it("   ... after balancing, there are %d/%d punctuation marks." % (the_poem.count(opening_char), the_poem.count(closing_char)), 3)
+    return the_poem
+
+def HTMLify(the_poem):
+    """Return a version of THE_POEM that ends lines with <br /> and wraps stanzas
+    in <p> ... </p>.
+    """
+    # Add HTML <br /> to end of every line
+    ret = '\n'.join([line.rstrip() + '<br />' for line in the_poem.split('\n')])
+    # Wrap stanzas in <p> ... </p>
+    ret = '\n'.join(['<p>%s</p>' % line for line in ret.split('<br />\n<br />')])
+    # Eliminate extra line breaks at the very beginning of paragraphs
+    ret = th.multi_replace(ret, [['<p><br />\n', '<p>'], ['<p>\n', '<p>'], ['<p>\n', '<p>']])
+    return ret
+
+
+def appropriate_quote(quote_list, quote_level, standard_english_quotes=False):
+    """Returns the appropriate quotation mark from QUOTE_LIST, which is a list of
+    (opening or closing) quotation marks. The quotation mark is chosen to be the
+    correct mark to open or close a quote at QUOTE_LEVEL levels of nesting. If
+    STANDARD_ENGLISH_QUOTES is False (the default), then American-style rules for
+    quotes are used (double, then single, then double, then single, then double,
+    then single ...); otherwise, Standard English rules (single, double, single ...)
+    are used.
+
+    This function makes a number of assumptions about the structure of QUOTE_LIST:
+        * it must contain at least two strings.
+        * the first string must be a single quote.
+        * the second string must be a double quote.
+        * any other strings in the list are ignored and not used at all by this
+          function, though they may be useful to other bits of code in this
+          project.
+
+    Here's a quick summary of the first few levels of nesting, for reference, and
+    assuming that the lists passed are the global constants open_quotes and
+    close_quotes:
+
+              Standard English            American English
+    level   opening     closing         opening     closing
+    -----   -------     -------         -------     -------
+      1       ‘            ’               “           ”
+      2       “            ”               ‘           ’
+      3       ‘            ’               “           ”
+      4       “            ”               ‘           ’
+      5       ‘            ’               “           ”
+                                 etc.
+    """
+    return quote_list[((0 if standard_english_quotes else 1) + quote_level - 1) % 2]
+
+
+def normalize_quotes(the_poem, standard_english_quotes=False):
+    """Takes THE_POEM, a string representing an entire poem, and makes sure that
+    quotation marks are used "correctly": not only are there the same number of
+    opening and closing quotation marks, but they are properly nested, with single
+    and double quotes alternating properly, and opening quotes always preceding
+    closing quotes in an appropriate fashion.
+
+    As with much of the other quote-handling code in this project, assumes that
+    quotation marks are single characters.
+
+    Returns a string, which is the entire modified poem.
+
+    #FIXME: currently, STANDARD_ENGLISH_QUOTES is *never* True. Should it be?
+    """
+    ret = ""
+    quote_depth = 0
+    for i, c in enumerate(the_poem):
+        if c in open_quotes:
+            quote_depth += 1
+            ret += appropriate_quote(open_quotes, quote_depth, standard_english_quotes=standard_english_quotes)
+            continue
+        elif c in close_quotes:
+            if quote_depth < 1:     # is there no current quote to close? move along, dropping this quotation mark
+                continue
+            if i == 0:              # don't open the poem with a closing quote mark. Just move on.
+                continue
+            if i < (len(the_poem) - 1): # If we've got at least one more character in the poem, make sure this closing quote isn't actually an apostrophe.
+                if th._is_alphanumeric_char(the_poem[i-1]) and th._is_alphanumeric_char(the_poem[i+1]):
+                    continue
+            ret += appropriate_quote(close_quotes, quote_depth, standard_english_quotes=standard_english_quotes)
+            quote_depth -= 1
+            continue
+        else:
+            ret += c
+    # before finishing, close any remaining open quotations.
+    while quote_depth > 0:
+        ret += appropriate_quote(close_quotes, quote_depth)
+        quote_depth -= 1
+    return ret
+
+
 def fix_punctuation(the_poem):
-    """Cleans up the punctuation in the poems so that it appears to be more
+    """Cleans up the punctuation in the poem so that it appears to be more
     'correct.' Since characters are generated randomly based on a frequency
     analysis of which characters are likely to follow the last three to ten
     characters, there's no guarantee that (for instance) parentheses or quotes
@@ -573,6 +736,7 @@ def fix_punctuation(the_poem):
     the_poem = balance_punctuation(the_poem, "‘", "’")
     the_poem = balance_punctuation(the_poem,  '“', '”')
     the_poem = balance_punctuation(the_poem,  '(', ')')
+    the_poem = normalize_quotes(the_poem)
     the_poem = balance_punctuation(the_poem,  '[', ']')
     return balance_punctuation(the_poem,  '{', '}')
 
@@ -663,78 +827,6 @@ def curlify_quotes(the_poem, straight_quote, opening_quote, closing_quote):
                 the_poem = the_poem[:index-1] + closing_quote + the_poem[index+1:]  # Make it an apostrophe.
             else:
                 raise NotImplementedError("We don't know how to deal with this quote: %s " % straight_quote)
-    return the_poem
-
-def balance_punctuation(the_poem, opening_char, closing_char):
-    """Makes sure that paired punctuation (smart quotes, parentheses, brackets) in the
-    poem are 'balanced.' If not, it attempts to correct it.
-    """
-    opening, closing = the_poem.count(opening_char), the_poem.count(closing_char)
-    if closing_char == '’':     # Sigh. We have to worry about apostrophes that look like closing single quotes.
-        closing -= len(re.findall('[:alnum:]*’[:alnum:]', the_poem))    # Inside a word? It's an apostrophe. Don't count it
-
-    log_it("INFO: Balancing %s and %s (%d/%d)" % (opening_char, closing_char, opening, closing), 2)
-
-    if opening or closing:      # Do nothing if there's no instances of either character
-        if opening != closing:  # Do nothing if we already have equal numbers (even if not properly "balanced")
-            nesting_level = 0   # How many levels deep are we right now in the punctuation we're tracking?
-            indexed_poem = list(the_poem)
-            index = 0
-            while index <= (len(indexed_poem)-1):
-                char = indexed_poem[index]
-                next_char = '' if index == len(indexed_poem) -1 else indexed_poem[index + 1]
-                last_char = '' if index == 0 else indexed_poem[index - 1]
-                if index == (len(indexed_poem)-1) :  # End of the poem?
-                    if nesting_level > 0:               # Close any open characters.
-                        indexed_poem += [closing_char]
-                        nesting_level -= 1
-                    index += 1
-                elif char == opening_char:          # Opening character?
-                    if index == len(indexed_poem):      # Last character is an opening character?
-                        indexed_poem.pop(-1)            # Just drop it.
-                    else:
-                        nesting_level += 1              # We're one level deeper
-                        index += 1                          # Move on to next character
-                elif char == closing_char:          # Closing character?
-                    if (closing_char == '’') and (th.is_alphanumeric(next_char) and th.is_alphanumeric(last_char)):
-                        index += 1      # Skip apostrophes in the middle of words
-                    else:
-                        if nesting_level < 1:               # Are we trying to close something that's not open?
-                            indexed_poem.pop(index)         # Just drop the spurious close quote
-                        else:
-                            if next_char.isspace():             # Avoid non-quote apostrophes in middle of words.
-                                nesting_level -= 1          # We're one level less deep
-                            index += 1                      # Move on to next character
-                elif nesting_level > 0:             # Are we currently in the middle of a bracketed block?
-                    if next_char.isspace():             # Is the next character whitespace?
-                        if random.random() < (0.001 * nesting_level):   # Low chance of closing the open bracket
-                            indexed_poem.insert(index, closing_char)
-                            nesting_level -= 1
-                    elif char in ['.', '?', '!'] and next_char.isspace():
-                        if random.random() < (0.05 * nesting_level):    # Higher chance of closing the open bracketer
-                            indexed_poem.insert(index, closing_char)
-                            nesting_level -= 1
-                            if random.random() < 0.2:                       # Force new paragraph break?
-                                indexed_poem.insert(index + 1, '\n')
-                    elif char in known_punctuation and last_char in ['.', '!', '?']:
-                        if random.random() < (0.05 * nesting_level):
-                            indexed_poem.insert(index, closing_char)
-                            nesting_level -= 1
-                            if random.random() < 0.2:                       # Force new paragraph break?
-                                indexed_poem.insert(index + 1, '\n')
-                    elif char == '\n' and next_char == '\n':            # Very high chance of closing on paragraph boundaries
-                        if random.random() < (0.4 * nesting_level):
-                            indexed_poem.insert(index, closing_char)
-                            nesting_level -= 1
-                    elif char == '\n':
-                        if random.random() < (0.1 * nesting_level):
-                            indexed_poem.insert(index, closing_char)
-                            nesting_level -= 1
-                    index += 1
-                else:
-                    index += 1
-            the_poem = ''.join(indexed_poem)
-    log_it("   ... after balancing, there are %d/%d punctuation marks." % (the_poem.count(opening_char), the_poem.count(closing_char)), 3)
     return the_poem
 
 def do_basic_cleaning(the_poem):
@@ -891,6 +983,7 @@ def open_cache():
                 similarity_cache = CurrentSimilarityCache()
                 yield similarity_cache
                 opened = True
+                log_it("DEBUG: The open_cache() context manager is about to flush the similarity cache.", minimum_level=2)
                 similarity_cache.flush_cache()
         except pid.PidFileError:                        # Already in use? Wait and try again.
             time.sleep(10)
@@ -936,12 +1029,7 @@ def main():
     log_it("INFO: HTML-izing poem ...")
     # Force all spaces to be non-breaking spaces
     formatted_poem = th.multi_replace(the_poem, [[' ', '&nbsp;']])
-    # Add HTML <br /> to end of every line
-    formatted_poem = '\n'.join([line.rstrip() + '<br />' for line in the_poem.split('\n')])   #FIXME: let's not overwrite the result of the previous call.
-    # Wrap stanzas in <p> ... </p>
-    formatted_poem = '\n'.join(['<p>%s</p>' % line for line in formatted_poem.split('<br />\n<br />')])
-    # Eliminate extra line breaks at the very beginning of paragraphs
-    formatted_poem = th.multi_replace(formatted_poem, [['<p><br />\n', '<p>'], ['<p>\n', '<p>'], ['<p>\n', '<p>']])
+    formatted_poem = HTMLify(formatted_poem)
     # Pretty-print (for debugging only; doesn't matter for Tumblr upload, but neither does it cause problems)
     formatted_poem = th.multi_replace(formatted_poem, [['<p>\n', '\n<p>']])
     # Prevent all spaces from collapsing; get rid of spurious paragraphs
