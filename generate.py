@@ -144,8 +144,8 @@ LICENSE.md for more details.
 #     * e.g., em dash-apostrophe-capital letter should turn the apostrophe into an opening single quote, but gets it wrong
 
 
-import bz2, contextlib, datetime, functools, glob, json, os
-import pprint, random, re, shlex, string, sys, time, unicodedata
+import bz2, datetime, functools, glob, json
+import pprint, random, re, shlex, sys, unicodedata
 
 import pid                                              # https://pypi.python.org/pypi/pid/
 
@@ -153,7 +153,7 @@ from nltk.corpus import cmudict                         # nltk.org
 
 
 from utils import *                                     # Filesystem structure, etc.
-from similarity_cache import CurrentSimilarityCache     # Cache of calculated textual similarities.
+from similarity_cache import open_cache  # Cache of calculated textual similarities.
 
 
 import patrick_logger                                   # https://github.com/patrick-brian-mooney/personal-library
@@ -170,10 +170,6 @@ import text_handling as th                              # https://github.com/pat
 
 
 patrick_logger.verbosity_level = 3
-
-known_punctuation = string.punctuation + "‘’“”"
-open_quotes = ("‘", "“")
-close_quotes = ("’", "”")
 
 syllable_dict = cmudict.dict()
 
@@ -690,10 +686,16 @@ def normalize_quotes(the_poem, standard_english_quotes=False):
     quote_depth = 0
     for i, c in enumerate(the_poem):
         if c in open_quotes:
+            if i < (len(the_poem)-1):       # Special-case 'tis, 'twas, 'gainst, etc.
+                context = the_poem[i+1:]
+                for which_exception in words_with_initial_apostrophes:
+                    if context.startswith(which_exception) and context[len(which_exception)].isspace():
+                        ret += close_quotes[0]
+                        continue
             quote_depth += 1
             ret += appropriate_quote(open_quotes, quote_depth, standard_english_quotes=standard_english_quotes)
             continue
-        elif c in close_quotes:
+        if c in close_quotes:
             if quote_depth < 1:     # is there no current quote to close? move along, dropping this quotation mark
                 continue
             if i == 0:              # don't open the poem with a closing quote mark. Just move on.
@@ -757,7 +759,7 @@ def get_title(the_poem):
         title = th.strip_leading_and_trailing_punctuation(the_poem.strip().split('\n')[0]).strip()
     elif random.random() < (3/6):           # Pick one of the first three lines
         title = "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip()
-    else:                                   # New 'sentence'
+    else:                                   # New 'sentence' from same poem
         title = th.strip_leading_and_trailing_punctuation(genny.gen_text(sentences_desired=1).split('\n')[0].strip())
     if len(title) < 5:                              # Try again, recursively.
         title = get_title(the_poem)
@@ -849,6 +851,7 @@ def do_final_cleaning(the_poem):
                                            ['\n"', '\n'], ['\n”', '\n'], ['\n’', '’'],
                                            ['“\n', '“'], ['"\n', '"'],  # And line breaks right after beginning punctuation
                                            ['\n—\n', '—\n'],            # Don't allow an em dash to be the only character on a line.
+                                           ['`', '’']                   # Replace backticks with faux apostrophes
                                           ])
     poem_lines = the_poem.split('\n')
     index = 0
@@ -969,26 +972,6 @@ def get_source_texts(similarity_cache):
         return new_selection_method(available, similarity_cache)
 
 
-@contextlib.contextmanager
-def open_cache():
-    """A context manager that returns the persistent similarity cache and closes it,
-    updating it if necessary, when it's done being used. This function repeatedly
-    attempts to acquire exclusive access to the cache until it is successful at
-    doing so, checking the updating_lock_name lock until it can acquire it.
-    """
-    opened = False
-    while not opened:
-        try:
-            with pid.PidFile(piddir=lock_file_dir, pidname=updating_lock_name):
-                similarity_cache = CurrentSimilarityCache()
-                yield similarity_cache
-                opened = True
-                log_it("DEBUG: The open_cache() context manager is about to flush the similarity cache.", minimum_level=2)
-                similarity_cache.flush_cache()
-        except pid.PidFileError:                        # Already in use? Wait and try again.
-            time.sleep(10)
-
-
 def main():
     global genny, post_data
 
@@ -1056,37 +1039,11 @@ def main():
     log_it("INFO: We're done")
 
 
-def clean_cache():
-    """Clean out the existing file similarity cache, then quit."""
-    with open_cache() as similarity_cache:
-        similarity_cache.clean_cache()
-    sys.exit(0)
-
-
-def build_cache():
-    """Clean out the existing file similarity cache, then make sure it's fully populated."""
-    with open_cache() as similarity_cache:
-        similarity_cache.clean_cache()
-        similarity_cache.build_cache()
-    sys.exit(0)
-
-
-force_cache_update = False                  # Set this to True to easily step through this in an IDE.
-if force_cache_update:
-    log_it("force_cache_update is True in source; fully populating cache ...")
-    build_cache()
-    log_it("update complete, quitting ...")
-    sys.exit(0)
-
 
 if __name__ == "__main__":
     if len(sys.argv) == 2:
         if sys.argv[1] in ['--help', '-h']:
             print_usage()
-        elif sys.argv[1] in ['--clean', '-c']:
-            clean_cache()
-        elif sys.argv[1] in ['--build', '-b']:
-            build_cache()
         else:
             print_usage(1)
     elif len(sys.argv) > 2:

@@ -16,6 +16,7 @@ import bz2, contextlib, glob, os, pickle, shlex, subprocess, time
 from typing import List
 
 import generate
+from utils import *
 import text_generator as tg
 
 import text_handling as th                          # https://github.com/patrick-brian-mooney/python-personal-library/
@@ -69,11 +70,11 @@ def write_cache() -> None:
     """Write the 'tests performed' cache out to disk."""
     global tests_performed
     with bz2.open(tests_performed_cache_loc, 'wb') as the_cache:
-        pickle.dump(tests_performed, the_cache, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(tests_performed, the_cache, protocol=1)
 
 
 @contextlib.contextmanager
-def open_cache() -> dict:
+def open_cache() -> None:
     """A context manager that ensures the global cache of tests performed is updated
     when the context manager is exited.
     """
@@ -195,28 +196,41 @@ def check_file(what_file: str) -> None:
     the_text = original_text.split('\n')
 
     # First, perform line-by-line tests.
-    if not check_test_performed(what_file, 'strip trailing whitespace'):
+    if not check_test_performed(what_file, strip_trailing_whitespace):
         the_text = [ l.rstrip() for l in the_text ]      # Drop whitespace at the end of lines
-        set_test_performed(what_file, "strip trailing whitespace")
+        set_test_performed(what_file, strip_trailing_whitespace)
     else:
         log_it("    Skipping test for trailing whitespace: already performed!", 5)
 
-    if not check_test_performed(what_file, "decapitalize beginnings of lines"):
+    if not check_test_performed(what_file, decapitalize_line_beginnings):
         the_text = decapitalize_beginnings_of_lines(the_text, what_file)
-        set_test_performed(what_file, "decapitalize beginnings of lines")
+        set_test_performed(what_file, decapitalize_line_beginnings)
     else:
         log_it("    Skipping check for beginning-of-line capitalization: already performed!", 5)
 
     # Now, whole-text tests.
     the_text = '\n'.join(the_text)
-    if not check_test_performed(what_file, "file ends with two newlines"):
+
+    if not check_test_performed(what_file, no_dumb_quotes):
+        if '"' in the_text or "'" in the_text:
+            the_text = generate.curlify_quotes(the_text, "'", "‘", "’")
+            the_text = generate.curlify_quotes(the_text, '"', '“', '”')
+            log_it("Curlified quotes!", 2)
+        else:
+            log_it("No quotes to curlify!", 4)
+        set_test_performed(what_file, no_dumb_quotes)
+    else:
+        log_it("    Skipping check for dumb quotes: already performed!", 5)
+
+    if not check_test_performed(what_file, two_newlines_at_end):
         while not the_text.endswith('\n\n'):
             the_text += "\n"
         while the_text.endswith('\n\n\n'):
             the_text = the_text[:-1]
-        set_test_performed(what_file, "file ends with two newlines")
+        set_test_performed(what_file, two_newlines_at_end)
     else:
         log_it("    Skipping check for two end newlines: already performed!", 5)
+
 
     if the_text != original_text:
         log_it("  INFO: file changed: %s. Saving ..." % os.path.basename(what_file), 1)

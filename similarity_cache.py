@@ -13,7 +13,7 @@ any later version. See the file LICENSE.md for details.
 """
 
 
-import array, bz2, collections, functools, glob, os, pickle, shlex, time
+import array, bz2, collections, contextlib, functools, glob, os, pickle, shlex, sys, time
 
 import pid                                              # https://pypi.python.org/pypi/pid/
 
@@ -22,6 +22,8 @@ from utils import *
 import poetry_generator as pg
 
 from patrick_logger import log_it       # https://github.com/patrick-brian-mooney/personal-library
+
+from utils import lock_file_dir, updating_lock_name
 
 
 @functools.lru_cache(maxsize=8)
@@ -265,6 +267,12 @@ class ShardedChainMap(collections.ChainMap):
     """
     _maximum_shard_size = 2 ** 16
 
+    def __repr__(self):
+        try:
+            return "< ShardedChainMap, in %d shards, with %d results cached >" % (len(self.maps), len(self))
+        except BaseException as err:
+            return "< ShardedChainMap (unknown state because %s) >" % err
+
     def __setitem__(self, key, value):
         for mapping in self.maps:                           # If it's already in one of the underlying dicts, update it
             if key in mapping:
@@ -370,7 +378,7 @@ class ChainMapSimilarityCache(BasicSimilarityCache):
             entries_validated += 1
             if entries_validated % 1000 == 0:
                 log_it("We've validated %d entries, that's %.04f%%!" % (entries_validated, 100*(entries_validated/len(self._data))))
-        entries_cleaned = len(pruned) - len(self._data)
+        entries_cleaned = len(self._data) - len(pruned)
         log_it("DONE! Eliminated %d stale entries (that's %.04f%%)." % (entries_cleaned, 100 * (entries_cleaned/len(self._data))))
         self._data = pruned
         self.flush_cache()
@@ -883,9 +891,67 @@ class VerySlowSimilarityCache(BasicSimilarityCache):
         return self._similarity_data[os.path.basename(one)][os.path.basename(two)]
 
 
+@contextlib.contextmanager
+def open_cache():
+    """A context manager that returns the persistent similarity cache and closes it,
+    updating it if necessary, when it's done being used. This function repeatedly
+    attempts to acquire exclusive access to the cache until it is successful at
+    doing so, checking the updating_lock_name lock until it can acquire it.
+    """
+    opened = False
+    while not opened:
+        try:
+            with pid.PidFile(piddir=lock_file_dir, pidname=updating_lock_name):
+                similarity_cache = CurrentSimilarityCache()
+                yield similarity_cache
+                opened = True
+                if similarity_cache._dirty:
+                    log_it("DEBUG: The open_cache() context manager is about to flush the similarity cache.", minimum_level=2)
+                    similarity_cache.flush_cache()
+        except pid.PidFileError:                        # Already in use? Wait and try again.
+            time.sleep(10)
+
+
+def clean_cache():
+    """Clean out the existing file similarity cache, then quit."""
+    with open_cache() as similarity_cache:
+        similarity_cache.clean_cache()
+    sys.exit(0)
+
+
+def build_cache():
+    """Clean out the existing file similarity cache, then make sure it's fully populated."""
+    with open_cache() as similarity_cache:
+        similarity_cache.clean_cache()
+        similarity_cache.build_cache()
+    sys.exit(0)
+
+
+force_cache_update = False                  # Set this to True to easily step through this in an IDE.
+if force_cache_update:
+    log_it("force_cache_update is True in source; fully populating cache ...")
+    build_cache()
+    log_it("update complete, quitting ...")
+    sys.exit(0)
+
 
 if __name__ == "__main__":
-    # Debugging harness, for walking through in an IDE.
+    # First: if command-line args are used, just clean, or build, then quit.
+    if len(sys.argv) == 2:
+        if sys.argv[1] in ['--clean', '-c']:
+            clean_cache()
+        elif sys.argv[1] in ['--build', '-b']:
+            build_cache()
+        else:
+            print("ERROR: the only accepted command-line arguments are -c [--clean] and -b [--build]!")
+            sys.exit(1)
+
+    if len(sys.argv) > 2:
+        print("ERROR: unable to understand command-line arguments!")
+        sys.exit(1)
+
+
+    # Otherwise, use this as a debugging harness, for walking through in an IDE.
     import patrick_logger
     patrick_logger.verbosity_level = 3
 
