@@ -8,7 +8,7 @@ terms of the GNU General Public License, either version 3 or (at your option)
 any later version. See the file LICENSE.md for details.
 """
 
-import os
+import os, string
 
 
 home_dir = '/LibidoMechanica'
@@ -21,3 +21,17 @@ sharded_cache_location = os.path.join(home_dir, 'cache')
 lock_file_dir = home_dir
 running_lock_name = 'running.pid'
 updating_lock_name = 'updating.pid'
+
+
+known_punctuation = string.punctuation + "‘’“”"
+open_quotes = ("‘", "“")
+close_quotes = ("’", "”")
+
+words_with_initial_apostrophes = ['tis', 'twas', 't is', 't was', 'gainst']
+
+
+# Names of validation tests
+strip_trailing_whitespace = 'strip trailing whitespace'
+decapitalize_line_beginnings = "decapitalize beginnings of lines"
+two_newlines_at_end = "file ends with two newlines"
+no_dumb_quotes = "file contains no dumb quotes"
