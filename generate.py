@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """generate.py creates the content at LibidoMechanica.tumblr.com, which is a
 blog consisting of automatically written "love poetry" created by this script.
-This program is copyright 2017-18 by Patrick Mooney.
+This program is copyright 2017-19 by Patrick Mooney.
 
 
 Usage:
@@ -249,7 +249,7 @@ def is_prime(n):
 
 
 def lines_without_stanza_breaks(the_poem):
-    """Returns a *list* of lines from THE_POEM, removing any stanza breaks."""
+    """Returns a *list* of lines from THE_POEM, ignoring any blank lines."""
     return [l for l in the_poem.split('\n') if len(l.strip()) > 0]
 
 def total_lines(the_poem):
@@ -942,7 +942,7 @@ def new_selection_method(available, similarity_cache):
         if candidates % 5 == 0:
             log_it("    ... %d selection candidates" % candidates, 4)
             if changed:
-                if (1 - random.random() ** 4.5) < ((len(ret) - 160) / 250):
+                if (1 - random.random() ** 4.5) < ((len(ret) - 100) / 150):
                     done = True
         if candidates % 25 == 0:
             if len(ret) > last_count:
