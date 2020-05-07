@@ -1,45 +1,60 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python3.5
 # -*- coding: utf-8 -*-
-"""similarity_cache.py is a utility class for Patrick Mooney's LibidoMechanica
+"""similarity_cache.pyx is a utility class for Patrick Mooney's LibidoMechanica
 project. It provides a class that tracks calculated "similarity" between texts
 in the poetry corpus. This is an expensive calculation whose value needs to be
 known repeatedly over multiple runs of the script, so it's saved once made.
 
 This file is part of the LibidoMechanica scripts, a project that is copyright
-2016-19 by Patrick Mooney. It is alpha software and the author releases it
+2016-20 by Patrick Mooney. It is alpha software and the author releases it
 ABSOLUTELY WITHOUT WARRANTY OF ANY KIND. You are welcome to use it under the
 terms of the GNU General Public License, either version 3 or (at your option)
 any later version. See the file LICENSE.md for details.
 """
 
 
-import array, bz2, collections, contextlib, functools, glob, os, pickle, shlex, sys, time
+import array
+import bz2
+import collections
+import contextlib
+import functools
+import glob
+import os
+
+from pathlib import Path
+
+import pickle
+import shlex
+import sys
+import time
+import typing
+
 
 import pid                                              # https://pypi.python.org/pypi/pid/
 
 
-from utils import *
+from bin.globs import *
 import poetry_generator as pg
+import text_generator as tg
 
-from patrick_logger import log_it       # https://github.com/patrick-brian-mooney/personal-library
 
-from utils import lock_file_dir, updating_lock_name
-
+def log_it(what: str, min_level: int=1): pass           # FIXME! Let's actually hook this up to a logger.
 
 @functools.lru_cache(maxsize=8)
-def get_mappings(f, markov_length):
+def get_mappings(f: typing.Union[str, Path],
+                 markov_length: int) -> tg.MarkovChainTextModel:
     """Trains a generator, then returns the calculated mappings."""
     log_it("get_mappings() called for file %s" % f, 5)
     return pg.PoemGenerator(training_texts=[f], markov_length=markov_length).chains.the_mapping
 
 
 @functools.lru_cache(maxsize=2048)
-def _comparative_form(what):
+def _comparative_form(what: typing.Union[str, Path]) -> str:
     """Get the standard form of a text's name for indexing lookup purposes."""
-    return os.path.basename(what.strip()).lower()
+    return os.path.basename(str(what).strip()).lower()
 
 
-def _all_poems_in_comparative_form():
+def _all_poems_in_comparative_form() -> typing.Dict[str, typing.Union[str, Path]]:
     """Get a dictionary mapping the comparative form of all poems currently in the
     corpus to their full actual filename.
     """
@@ -59,18 +74,18 @@ class BasicSimilarityCache(object):
                   }
              }
     """
-    def __init__(self, cache_file=similarity_cache_location):
+    def __init__(self, cache_file: typing.Union[Path, str]=similarity_cache_location):
         try:
             with bz2.open(similarity_cache_location, "rb") as pickled_file:
                 log_it("Loading cached similarity data ...", 3)
                 self._data = pickle.load(pickled_file)
         except (OSError, EOFError, AttributeError, pickle.PicklingError) as err:
-            log_it("WARNING! Unable to load cached similarity data because %s. Preparing empty cache ..." % err)
+            print("WARNING! Unable to load cached similarity data because %s. Preparing empty cache ..." % err)
             self._data = dict()
         self._dirty = False
         self._cache_file = cache_file
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         try:
             return "< Basic Textual Similarity Cache, with %d results cached >" % len(self._data)
         except AttributeError:
@@ -120,7 +135,7 @@ class BasicSimilarityCache(object):
         self._dirty = False
 
     @staticmethod
-    def calculate_overlap(one, two):
+    def calculate_overlap(one: typing.Dict, two: typing.Dict) -> float:         #FIXME: what kind of Dict?
         """Returns the percentage of chains in dictionary ONE that are also in
         dictionary TWO.
         """
@@ -130,7 +145,7 @@ class BasicSimilarityCache(object):
         return overlap_count / len(one)
 
     @staticmethod
-    def _key_from_texts(one, two):
+    def _key_from_texts(one: typing.Union[str, Path], two: typing.Union[str, Path]) -> typing.Tuple[str, str]:
         """Given texts ONE and TWO, produce a hashable key that can be used to index the
         _data dictionary.
         """
@@ -139,20 +154,25 @@ class BasicSimilarityCache(object):
             one, two = two, one
         return (one, two)
 
-    def _store_data(self, one, two, similarity):
+    def _store_data(self, one: typing.Union[str, Path],
+                    two: typing.Union[str, Path],
+                    similarity: float):
         """Store the SIMILARITY (a float between 0 and 1, weighted toward zero)
         between texts ONE and TWO in the cache.
         """
         key = self._key_from_texts(one, two)
         self._data[key] = {'when': time.time(), 'similarity': similarity, }
 
-    def calculate_similarity(self, one, two, markov_length=5):
+    def calculate_similarity(self, one: typing.Union[str, Path],
+                             two: typing.Union[str, Path],
+                             markov_length: int=5) -> float:
         """Come up with a score evaluating how similar the two texts are to each other.
         This actually means, more specifically, "the product of (a) the percentage of
         chains in the set of chains of length MARKOV_LENGTH constructed from text ONE
         that are also in text TWO; multiplied by (b) the percentage of chains of
         length MARKOV_LENGTH constructed from text TWO that are also in chains
-        constructed from text ONE.
+        constructed from text ONE. That is, it's a float between 0 and 1, heavily
+        weighted toward zero.
 
         This routine also caches the calculated result in the global similarity cache.
         It's a comparatively expensive calculation to make, so we store the results.
@@ -167,7 +187,8 @@ class BasicSimilarityCache(object):
         self._dirty = True
         return ret
 
-    def get_similarity(self, one, two):
+    def get_similarity(self, one: typing.Union[str, Path],
+                       two: typing.Union[str, Path]) -> float:
         """Checks to see if the similarity between ONE and TWO is already known. If it is,
         returns that similarity. Otherwise, calculates the similarity and stores it in
         the global similarity cache, which is written at the end of the script's run.
@@ -235,7 +256,7 @@ class BasicSimilarityCache(object):
         for count, (one, two) in enumerate(self._data):
             try:
                 if count % 1000 == 0:
-                    log_it("We're on entry # %d: that's %d %% done!" % (count, (100 * count/len(self._data))))
+                    print("We're on entry # %d: that's %d %% done!" % (count, (100 * count/len(self._data))))
                 assert os.path.isfile(os.path.join(poetry_corpus, one)), "'%s' does not exist!" % one
                 assert os.path.isfile(os.path.join(poetry_corpus, two)), "'%s' does not exist!" % two
                 assert one <= two, "%s and %s are mis-ordered!" % (one, two)
@@ -243,13 +264,13 @@ class BasicSimilarityCache(object):
                 assert self._data[(one, two)]['when'] >= os.path.getmtime(os.path.join(poetry_corpus, two)), "data for '%s' is stale!" % two
                 _ = int(self._data[(one, two)]['when'])
             except (AssertionError, ValueError, KeyError) as err:
-                log_it("Removing entry: (%s, %s)    -- because: %s" % (one, two, err))
+                print("Removing entry: (%s, %s)    -- because: %s" % (one, two, err))
                 del pruned[(one, two)]
                 self._dirty = True
             except BaseException as err:
-                log_it("Unhandled error: %s! Leaving data in place" % err)
+                print("Unhandled error: %s! Leaving data in place" % err)
         removed = len(self._data) - len(pruned)
-        log_it("Removed %d entries; that's %d %%!" % (removed, 100 * removed/len(self._data)))
+        print("Removed %d entries; that's %d %%!" % (removed, 100 * removed/len(self._data)))
         self._data = pruned
         # We're now going to flush the newly cleaned cache directly to disk. Note that
         # we're not UPDATING THE CACHE using flush_cache(), because that would just
@@ -257,7 +278,7 @@ class BasicSimilarityCache(object):
         with bz2.open(self._cache_file, 'wb') as pickled_file:
             pickle.dump(self._data, pickled_file, protocol=pickle.HIGHEST_PROTOCOL)
             self._dirty = False
-            log_it("Cache updated!")
+            print("Cache updated!")
 
 
 class ShardedChainMap(collections.ChainMap):
@@ -267,13 +288,14 @@ class ShardedChainMap(collections.ChainMap):
     """
     _maximum_shard_size = 2 ** 16
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         try:
             return "< ShardedChainMap, in %d shards, with %d results cached >" % (len(self.maps), len(self))
         except BaseException as err:
             return "< ShardedChainMap (unknown state because %s) >" % err
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: typing.Tuple[typing.Union[str, Path], typing.Union[str, Path]],
+                    value: float):
         for mapping in self.maps:                           # If it's already in one of the underlying dicts, update it
             if key in mapping:
                 mapping[key] = value
@@ -285,7 +307,7 @@ class ShardedChainMap(collections.ChainMap):
         self.maps = [dict()] + self.maps                    # Otherwise, create a new shard and use it to store the value
         self.maps[0][key] = value
 
-    def __delitem__(self, key):
+    def __delitem__(self, key: typing.Tuple[typing.Union[str, Path], typing.Union[str, Path]]):
         for mapping in self.maps:
             if key in mapping:
                 del mapping[key]
@@ -300,20 +322,20 @@ class ChainMapSimilarityCache(BasicSimilarityCache):
     """
     def __init__(self):
         if not os.path.isdir(sharded_cache_location):
-            log_it("Directory for storing similarity cache shards does not exist, creating ...")
+            print("Directory for storing similarity cache shards does not exist, creating ...")
             os.mkdir(sharded_cache_location)
         shards = list()
         for shard in sorted(glob.glob(os.path.join(sharded_cache_location, '*'))):
             try:
                 with bz2.open(shard, mode='rb') as pickled_file:
-                    log_it("Loading cached similarity data from shard %s ..." % shlex.quote(shard))
+                    print("Loading cached similarity data from shard %s ..." % shlex.quote(shard))
                     shards.append(pickle.load(pickled_file))
             except (OSError, EOFError, AttributeError, pickle.PicklingError) as err:
-                log_it("WARNING! Unable to load cached similarity data because %s. Skipping this shard ..." % err)
+                print("WARNING! Unable to load cached similarity data because %s. Skipping this shard ..." % err)
         self._data = ShardedChainMap(*shards)
         self._dirty = False
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         try:
             return "< Fragmented Textual Similarity Cache, in %d shards, with %d results cached >" % (len(self._data.maps), len(self._data))
         except AttributeError:
@@ -348,7 +370,7 @@ class ChainMapSimilarityCache(BasicSimilarityCache):
                 try:
                     os.unlink(f)
                 except BaseException as err:
-                    log_it("WARNING! Unable to delete extraneous shard %s!" % f)
+                    log_it("WARNING! Unable to delete extraneous shard %s because %s!" % (f, err))
         log_it(" ... updated!", 1)
         self._dirty = False
 
@@ -373,13 +395,13 @@ class ChainMapSimilarityCache(BasicSimilarityCache):
                 # If we made it this far ...
                 pruned[key] = self._data[key]
             except (AssertionError, ValueError, KeyError, OSError) as err:
-                log_it("Removing entry: [ %s ]    -- because: %s" % (key, err))
+                print("Removing entry: [ %s ]    -- because: %s" % (key, err))
                 self._dirty = True
             entries_validated += 1
             if entries_validated % 1000 == 0:
-                log_it("We've validated %d entries, that's %.04f%%!" % (entries_validated, 100*(entries_validated/len(self._data))))
+                print("We've validated %d entries, that's %.04f%%!" % (entries_validated, 100*(entries_validated/len(self._data))))
         entries_cleaned = len(self._data) - len(pruned)
-        log_it("DONE! Eliminated %d stale entries (that's %.04f%%)." % (entries_cleaned, 100 * (entries_cleaned/len(self._data))))
+        print("DONE! Eliminated %d stale entries (that's %.04f%%)." % (entries_cleaned, 100 * (entries_cleaned/len(self._data))))
         self._data = pruned
         self.flush_cache()
 
@@ -402,11 +424,11 @@ class IndexedArraySimilarityCache(BasicSimilarityCache):
         return cls._instance
 
     @staticmethod
-    def _yielder(value, num_times):
+    def _yielder(value: int, num_times: int) -> int:
         for i in range(num_times):
             yield value
 
-    def __init__(self, cache_file=similarity_cache_location):
+    def __init__(self, cache_file: typing.Union[str, Path]=similarity_cache_location):
         self._dirty = False
         self._cache_file = cache_file
         try:
@@ -415,7 +437,7 @@ class IndexedArraySimilarityCache(BasicSimilarityCache):
                 self._similarity_data = pickle.load(pickled_file)
                 self._calculation_times = pickle.load(pickled_file)
         except BaseException as err:
-            log_it("WARNING! Unable to decode similarity cache because %s. Creating new from scratch ..." % err)
+            print("WARNING! Unable to decode similarity cache because %s. Creating new from scratch ..." % err)
             self._index = list()
             self._similarity_data = array.array('f')
             self._calculation_times = array.array('d')
@@ -427,7 +449,7 @@ class IndexedArraySimilarityCache(BasicSimilarityCache):
         if len(self._calculation_times) < (num_poems ** 2) / 2:
             self._calculation_times.extend(self._yielder(-1, ((num_poems ** 2) // 2) - len(self._calculation_times)))
 
-    def __repr__(self):
+    def __repr__(self) -> None:
         try:
             return "< IndexedArray Textual Similarity Cache, with %d results cached >" % len(self._index)
         except AttributeError:
@@ -436,7 +458,7 @@ class IndexedArraySimilarityCache(BasicSimilarityCache):
             return "< IndexedArray Textual Similarity Cache (unknown state because [ %s ]) >" % err
 
     @staticmethod
-    def _key_name_from_text_names(one, two):
+    def _key_name_from_text_names(one: str, two: str) -> str:
         """Takes ONE and TWO (filenames of source texts) and produces a normalized key
         used to index the similarity cache to find or store the similarity between those
         two texts. Returns a string, which is that key.
@@ -464,7 +486,7 @@ class IndexedArraySimilarityCache(BasicSimilarityCache):
         log_it(" ... updated successfully!", 3)
         self._dirty = False
 
-    def _index_from_key(self, key):
+    def _index_from_key(self, key) -> int:
         """Checks SELF's _index attribute for KEY and returns its numeric index. This
         numeric index is used to find data for KEY in self._similarity_data and
         self._calculation_times. If KEY is not in self._index, returns None.
@@ -474,7 +496,9 @@ class IndexedArraySimilarityCache(BasicSimilarityCache):
         except ValueError:
             return None
 
-    def _store_similarity(self, one, two, similarity):
+    def _store_similarity(self, one: typing.Union[str, Path],
+                          two: typing.Union[str, Path],
+                          similarity: float):
         """Store the calculated SIMILARITY between texts ONE and TWO in the similarity
         cache.
         """
@@ -491,7 +515,9 @@ class IndexedArraySimilarityCache(BasicSimilarityCache):
         self._calculation_times[current_index] = time.time()
         self._dirty = True
 
-    def calculate_similarity(self, one, two, markov_length=5):
+    def calculate_similarity(self, one: typing.Union[str, Path],
+                             two: typing.Union[str, Path],
+                             markov_length: int=5) -> float:
         """Calculate the similarity between texts ONE and TWO, then cache the result."""
         log_it("calculate_similarity() called for: %s" % [one, two], 5)
         if os.path.basename(one.strip()) == os.path.basename(two.strip()):
@@ -502,7 +528,8 @@ class IndexedArraySimilarityCache(BasicSimilarityCache):
         self._store_similarity(one, two, ret)
         return ret
 
-    def get_similarity(self, one, two):
+    def get_similarity(self, one: typing.Union[str, Path],
+                       two: typing.Union[str, Path]) -> float:
         """If the similarity between texts ONE and TWO is cached, and the calculated value
         is not stale, then return it. Otherwise, call calculate_similarity to calculate
         and cache the similarity, then return it.
@@ -531,7 +558,7 @@ class DictIndexedArraySimilarityCache(IndexedArraySimilarityCache):
     index will improve indexing performance -- and it works, a little, but it's
     still pretty slow.
     """
-    def __init__(self, cache_file=similarity_cache_location):
+    def __init__(self, cache_file: typing.Union[str, Path]=similarity_cache_location):
         self._dirty = False
         self._cache_file = cache_file
         try:
@@ -540,7 +567,7 @@ class DictIndexedArraySimilarityCache(IndexedArraySimilarityCache):
                 self._similarity_data = pickle.load(pickled_file)
                 self._calculation_times = pickle.load(pickled_file)
         except BaseException as err:
-            log_it("WARNING! Unable to decode similarity cache because %s. Creating new from scratch ..." % err)
+            print("WARNING! Unable to decode similarity cache because %s. Creating new from scratch ..." % err)
             self._index = dict()
             self._similarity_data = array.array('f')
             self._calculation_times = array.array('d')
@@ -552,7 +579,7 @@ class DictIndexedArraySimilarityCache(IndexedArraySimilarityCache):
         if len(self._calculation_times) < (num_poems ** 2) / 2:
             self._calculation_times.extend(self._yielder(0, ((num_poems ** 2) // 2) - len(self._calculation_times)))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         try:
             return "< DictIndexedArray Textual Similarity Cache, with %d results cached >" % len(self._index)
         except AttributeError:
@@ -561,7 +588,7 @@ class DictIndexedArraySimilarityCache(IndexedArraySimilarityCache):
             return "< DictIndexedArray Textual Similarity Cache (unknown state because [ %s ]) >" % err
 
     @staticmethod
-    def _key_from_text_names(one, two):
+    def _key_from_text_names(one: str, two: str) -> typing.Tuple[str, str]:
         """Takes ONE and TWO (filenames of source texts) and produces a normalized key
         used to index the similarity cache to find or store the similarity between those
         two texts. Returns a tuple, which is that key.
@@ -572,7 +599,7 @@ class DictIndexedArraySimilarityCache(IndexedArraySimilarityCache):
             one, two = two, one
         return (one, two)
 
-    def _index_from_key(self, key):
+    def _index_from_key(self, key) -> int:
         """Checks SELF's _index attribute for KEY and returns its numeric index. This
         numeric index is used to find data for KEY in self._similarity_data and
         self._calculation_times. If KEY is not in self._index, returns None.
@@ -582,7 +609,9 @@ class DictIndexedArraySimilarityCache(IndexedArraySimilarityCache):
         except (KeyError, ):
             return None
 
-    def _store_similarity(self, one, two, similarity):
+    def _store_similarity(self, one: typing.Union[str, Path],
+                          two: typing.Union[str, Path],
+                          similarity: float):
         """Store the similarity in the cache, lengthening it if necessary.
         """
         key = self._key_name_from_text_names(one, two)
@@ -607,7 +636,7 @@ class CurrentSimilarityCache(ChainMapSimilarityCache):
     pass
 
 
-# pandas only used below, in deprecated class. Import it here instead of up top.
+# pandas only used below, in deprecated class. Importing it here instead of up top.
 import pandas as pd                                     # https://pandas.pydata.org/
 
 
@@ -627,7 +656,7 @@ class MemoryHogSimilarityCache(BasicSimilarityCache):
             cls._instance = BasicSimilarityCache.__new__(cls)
         return cls._instance
 
-    def __init__(self, cache_file=similarity_cache_location):
+    def __init__(self, cache_file: typing.Union[str, Path]=similarity_cache_location):
         """Set up a new instance of this object. There should only ever be one.
         Try to read in cached data if it exists in the expected location. If not,
         create a new blank cache.
@@ -639,11 +668,11 @@ class MemoryHogSimilarityCache(BasicSimilarityCache):
                 self._similarity_data = pickle.load(pickled_file)
                 self._calculation_times = pickle.load(pickled_file)
         except BaseException as err:
-            log_it("WARNING! Unable to decode similarity cache because %s. Creating new from scratch ..." % err)
+            print("WARNING! Unable to decode similarity cache because %s. Creating new from scratch ..." % err)
             self._similarity_data = pd.Series(dict(), dtype="float16")
             self._calculation_times = pd.Series(dict(), dtype="float64")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         try:
             return "< (MemoryHog) Textual Similarity Cache, with %d results cached >" % self._similarity_data.size
         except AttributeError:
@@ -677,7 +706,7 @@ class MemoryHogSimilarityCache(BasicSimilarityCache):
         self._dirty = False
 
     @staticmethod
-    def _key_name_from_text_names(one, two):
+    def _key_name_from_text_names(one: str, two: str) -> str:
         """Takes ONE and TWo (filenames of source texts) and produces a normalized key
         used to index the similarity cache to find or store the similarity between those
         two texts. Returns a string, which is that key.
@@ -692,7 +721,9 @@ class MemoryHogSimilarityCache(BasicSimilarityCache):
             one, two = two, one
         return """%s⇜⇝%s""" % (one, two)
 
-    def _store_similarity(self, one, two, similarity):
+    def _store_similarity(self, one: typing.Union[str, Path],
+                          two: typing.Union[str, Path],
+                          similarity: float):
         """Stores the SIMILARITY (a floating-point number between zero and one, heavily
         weighted toward 0) between ONE and TWO (filenames for texts being compared) in
         the data frames that keep data for this cache. The cache also stores a timestamp
@@ -717,7 +748,9 @@ class MemoryHogSimilarityCache(BasicSimilarityCache):
         self._calculation_times[key] = time.time()
         self._dirty = True
 
-    def calculate_similarity(self, one, two, markov_length=5):
+    def calculate_similarity(self, one: typing.Union[str, Path],
+                             two: typing.Union[str, Path],
+                             markov_length: int=5) -> float:
         log_it("calculate_similarity() called for: %s" % [one, two], 5)
         if one == two:
             return 1                        # Well, that's easy.
@@ -727,7 +760,8 @@ class MemoryHogSimilarityCache(BasicSimilarityCache):
         self._store_similarity(one, two, ret)
         return ret
 
-    def get_similarity(self, one, two):
+    def get_similarity(self, one: typing.Union[str, Path],
+                       two: typing.Union[str, Path]) -> float:
         key = self._key_name_from_text_names(one, two)
         if not key in self._similarity_data:
             log_it("  ... not found in cache! Calculating and caching ...", 6)
@@ -779,7 +813,7 @@ class VerySlowSimilarityCache(BasicSimilarityCache):
             cls._instance = BasicSimilarityCache.__new__(cls, *args, **kwargs)
         return cls._instance
 
-    def __init__(self, cache_file=similarity_cache_location):
+    def __init__(self, cache_file: typing.Union[str, Path]=similarity_cache_location):
         """Set up a new instance of this object. There should only ever be one.
         Try to read in cached data if it exists in the expected location. If not,
         create a new blank cache.
@@ -795,12 +829,12 @@ class VerySlowSimilarityCache(BasicSimilarityCache):
                 self._similarity_data = pickle.load(pickled_file)
                 self._calculation_times = pickle.load(pickled_file)
         except BaseException as err:
-            log_it("WARNING! Unable to decode similarity cache because %s. Creating new from scratch ..." % err)
+            print("WARNING! Unable to decode similarity cache because %s. Creating new from scratch ..." % err)
             poem_files = sorted([os.path.basename(f) for f in glob.glob(os.path.join(poetry_corpus, '*'))])
             self._similarity_data = pd.DataFrame(np.full((len(poem_files), len(poem_files)), np.nan, dtype="float16"), index=poem_files, columns=poem_files)
             self._calculation_times = pd.DataFrame(np.full((len(poem_files), len(poem_files)), np.nan, dtype="float64"), index=poem_files, columns=poem_files)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         try:
             return "< (BAD-style) Textual Similarity Cache, with %d results cached >" % sum(self._similarity_data.count())
         except AttributeError:
@@ -833,7 +867,9 @@ class VerySlowSimilarityCache(BasicSimilarityCache):
         log_it(" ... updated successfully!", 3)
         self._dirty = False
 
-    def calculate_similarity(self, one, two, markov_length=5):
+    def calculate_similarity(self, one: typing.Union[str, Path],
+                             two: typing.Union[str, Path],
+                             markov_length: int=5) -> float:
         """Come up with a score evaluating how similar the two texts are to each other.
         This actually means, more specifically, "the product of (a) the percentage of
         chains in the set of chains of length MARKOV_LENGTH constructed from text ONE
@@ -858,7 +894,8 @@ class VerySlowSimilarityCache(BasicSimilarityCache):
         self._dirty = True
         return ret
 
-    def get_similarity(self, one, two):
+    def get_similarity(self, one: typing.Union[str, Path],
+                       two: typing.Union[str, Path]) -> float:
         """Checks to see if the similarity between ONE and TWO is already known. If it is,
         returns that similarity from the cache. Otherwise, calculates the similarity and
         stores it in the global similarity cache, which is written at the end of the
@@ -906,7 +943,7 @@ def open_cache():
                 yield similarity_cache
                 opened = True
                 if similarity_cache._dirty:
-                    log_it("DEBUG: The open_cache() context manager is about to flush the similarity cache.", minimum_level=2)
+                    log_it("DEBUG: The open_cache() context manager is about to flush the similarity cache.", 2)
                     similarity_cache.flush_cache()
         except pid.PidFileError:                        # Already in use? Wait and try again.
             time.sleep(10)
@@ -929,9 +966,9 @@ def build_cache():
 
 force_cache_update = False                  # Set this to True to easily step through this in an IDE.
 if force_cache_update:
-    log_it("force_cache_update is True in source; fully populating cache ...")
+    print("force_cache_update is True in source; fully populating cache ...")
     build_cache()
-    log_it("update complete, quitting ...")
+    print("update complete, quitting ...")
     sys.exit(0)
 
 

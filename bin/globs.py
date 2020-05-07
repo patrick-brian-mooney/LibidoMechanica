@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""utils.py contains utilities for Patrick Mooney's LibidoMechanica project.
+"""globs.py contains utilities for Patrick Mooney's LibidoMechanica project.
 This file is part of the LibidoMechanica scripts, a project that is copyright
 2016-19 by Patrick Mooney. It is alpha software and the author releases it
 ABSOLUTELY WITHOUT WARRANTY OF ANY KIND. You are welcome to use it under the
