@@ -160,6 +160,8 @@ import pid                                              # https://pypi.python.or
 
 from nltk.corpus import cmudict                         # nltk.org
 
+import pyximport; pyximport.install()                   # http://cython.org
+
 
 import patrick_logger                                   # https://github.com/patrick-brian-mooney/personal-library
 from patrick_logger import log_it
@@ -173,7 +175,7 @@ import poetry_generator as pg                           # https://github.com/pat
 import text_handling as th                              # https://github.com/patrick-brian-mooney/personal-library
 
 from bin.globs import *                                 # Filesystem structure, etc.
-from bin.similarity_cache.similarity_cache import open_cache    # Cache of calculated textual similarities.
+import bin.similarity_cache.similarity_cache as sc      # Cache of calculated textual similarities.
 
 
 patrick_logger.verbosity_level = 3
@@ -983,7 +985,7 @@ def main():
     global genny, post_data
 
     if not oldmethod:
-        with open_cache() as similarity_cache:
+        with sc.open_cache() as similarity_cache:
             sample_texts = get_source_texts(similarity_cache)
     else:
         sample_texts = get_source_texts(None)
@@ -1039,7 +1041,7 @@ def main():
         new_folder = os.path.join(post_archives, "%03d" % (1 + int(os.path.basename(last_folder))))
         os.mkdir(new_folder)
         last_folder = new_folder
-        with open_cache() as similarity_cache:              # Every thousand poems, clean out the cache.
+        with sc.open_cache() as similarity_cache:              # Every thousand poems, clean out the cache.
             similarity_cache.clean_cache()
     with bz2.BZ2File(os.path.join(last_folder, archive_name), mode='wb') as archive_file:
         archive_file.write(json.dumps(post_data, sort_keys=True, indent=3, ensure_ascii=False).encode())
