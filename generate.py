@@ -132,7 +132,7 @@ LICENSE.md for more details.
 # * Over the long term, we need a better way to store and access the similarity cache. If we double the size of the
 #   corpus from here, we would be well over 100MB in a single bzipped, already-pickle-compressed pickle file. That's
 #   super-unwieldy. Plus, having all of that in memory at once already causes occasional problems at this size. I
-#   need to learn some sort of simple database implementation before the corpus gets much bigger.
+#   need to learn some sort of simple database implementation before the corpus gets much bigger.    --WORKING
 # * The directory structure needs reworking, and this module needs to be split into smaller files.   --WORKING
 #   * This probably implies a utils/ folder for secondary scripts, like check_corpus.py.
 #     * There will almost certainly be others.
@@ -144,29 +144,36 @@ LICENSE.md for more details.
 #     * e.g., em dash-apostrophe-capital letter should turn the apostrophe into an opening single quote, but gets it wrong
 
 
-import bz2, datetime, functools, glob, json
-import pprint, random, re, shlex, sys, unicodedata
+import bz2
+import datetime
+import functools
+import glob
+import json
+import pprint
+import random
+import re
+import shlex
+import sys
+import unicodedata
 
 import pid                                              # https://pypi.python.org/pypi/pid/
 
 from nltk.corpus import cmudict                         # nltk.org
 
 
-from utils import *                                     # Filesystem structure, etc.
-from similarity_cache import open_cache  # Cache of calculated textual similarities.
-
-
 import patrick_logger                                   # https://github.com/patrick-brian-mooney/personal-library
 from patrick_logger import log_it
 
+import file_utils as fu                                 # https://github.com/patrick-brian-mooney/python-personal-library/
 import social_media                                     # https://github.com/patrick-brian-mooney/personal-library
 from social_media_auth import libidomechanica_client    # Unshared file that contains authentication tokens.
 
-import file_utils as fu                                 # https://github.com/patrick-brian-mooney/python-personal-library/
 
 import poetry_generator as pg                           # https://github.com/patrick-brian-mooney/markov-sentence-generator
-
 import text_handling as th                              # https://github.com/patrick-brian-mooney/personal-library
+
+from bin.globs import *                                 # Filesystem structure, etc.
+from bin.similarity_cache.similarity_cache import open_cache    # Cache of calculated textual similarities.
 
 
 patrick_logger.verbosity_level = 3
@@ -181,7 +188,7 @@ post_data = {'tags': ['poetry', 'automatically generated text', 'Patrick Mooney'
              'stanza length': None,
              }
 
-genny = None            # We'll reassign this soon enough. We want it to be defined in the global namespace, though.
+genny = None            # We'll reassign this soon. We want it to be defined in the global namespace early, though.
 
 
 def print_usage(exit_code=0):
