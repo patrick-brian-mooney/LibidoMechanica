@@ -21,7 +21,7 @@ import text_generator as tg
 
 import text_handling as th                          # https://github.com/patrick-brian-mooney/python-personal-library/
 
-import searcher                                     # https://github.com/patrick-brian-mooney/python-personal-library/
+import file_utils as fu                             # https://github.com/patrick-brian-mooney/python-personal-library/
 
 import patrick_logger                               # https://github.com/patrick-brian-mooney/python-personal-library/
 from patrick_logger import log_it
@@ -52,7 +52,7 @@ def load_proper_noun_data() -> List[str]:
     """
     log_it("Loading known proper nouns ...", 2)
     ret = set()
-    for f in [f for f in searcher.get_files_list(dictionaries_loc) if os.path.isfile(f) and f.endswith('utf-8')]:
+    for f in [f for f in fu.get_files_list(dictionaries_loc) if os.path.isfile(f) and f.endswith('utf-8')]:
         with open(f) as dict_file:
             entries = frozenset({i.strip() for i in dict_file.readlines()})     # The set of words in the dictionary
         new = frozenset({l.strip() for l in entries if th.is_capitalized(l)})   # Capitalized words in dictionary

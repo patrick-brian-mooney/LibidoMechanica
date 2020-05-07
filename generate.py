@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.5
 # -*- coding: utf-8 -*-
 """generate.py creates the content at LibidoMechanica.tumblr.com, which is a
 blog consisting of automatically written "love poetry" created by this script.
@@ -160,9 +160,9 @@ import patrick_logger                                   # https://github.com/pat
 from patrick_logger import log_it
 
 import social_media                                     # https://github.com/patrick-brian-mooney/personal-library
-from social_media_auth import libidomechanica_client    # Unshared file that contains authentication tokens
+from social_media_auth import libidomechanica_client    # Unshared file that contains authentication tokens.
 
-import searcher                                         # https://github.com/patrick-brian-mooney/python-personal-library/blob/master/
+import file_utils as fu                                 # https://github.com/patrick-brian-mooney/python-personal-library/
 
 import poetry_generator as pg                           # https://github.com/patrick-brian-mooney/markov-sentence-generator
 
@@ -545,7 +545,7 @@ def regularize_form(the_poem):
 
 
 def count_previous_untitled_poems():
-    ret = len([x for x in searcher.get_files_list(post_archives, None) if 'untitled' in x.lower()])
+    ret = len([x for x in fu.get_files_list(post_archives, None) if 'untitled' in x.lower()])
     log_it("Counted previous untitled poems: %d" % ret, 4)
     return ret
 
@@ -555,7 +555,7 @@ def balance_punctuation(the_poem, opening_char, closing_char):
     """
     opening, closing = the_poem.count(opening_char), the_poem.count(closing_char)
     if closing_char == '’':     # Sigh. We have to worry about apostrophes that look like closing single quotes.
-        closing -= len(re.findall('[:alnum:]*’[:alnum:]', the_poem))    # Inside a word? It's an apostrophe. Don't count it
+        closing -= len(re.findall('[:alnum:]*’[:alnum:]', the_poem))    # Inside a word? It's an apostrophe. Don't count it.
 
     log_it("INFO: Balancing %s and %s (%d/%d)" % (opening_char, closing_char, opening, closing), 2)
 
