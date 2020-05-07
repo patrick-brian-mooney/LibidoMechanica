@@ -28,7 +28,6 @@ import pandas as pd                                     # https://pandas.pydata.
 import numpy as np                                      # http://www.numpy.org/
 
 
-
 class MemoryHogSimilarityCache(sc.BasicSimilarityCache):
     """This BasicSimilarityCache subclass uses a pair of pandas Series to store the
     relevant data. Turns out that pandas dataframes are slow to resize, and multiple

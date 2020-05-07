@@ -33,8 +33,8 @@ import pid                                              # https://pypi.python.or
 
 
 from bin.globs import *
-import poetry_generator as pg
 import text_generator as tg
+import poetry_generator as pg
 
 
 def log_it(what: str, min_level: int=1): pass           # FIXME! Let's actually hook this up to a logger.
@@ -61,7 +61,30 @@ def _all_poems_in_comparative_form() -> typing.Dict[str, typing.Union[str, Path]
     return {_comparative_form(p):os.path.abspath(p) for p in glob.glob(os.path.join(poetry_corpus, '*'))}
 
 
-class BasicSimilarityCache(object):
+cpdef float calculate_overlap(one: typing.Dict[typing.Tuple[str], typing.Dict[str, float]],
+                              two: typing.Dict[typing.Tuple[str], typing.Dict[str, float]]):
+    """Returns the percentage of chains in dictionary ONE that are also in
+    dictionary TWO.
+    """
+    cdef int overlap_count = 0
+    for which_chain in one.keys():
+        if which_chain in two: overlap_count += 1
+    return overlap_count / len(one)
+
+
+def _key_from_texts(first: typing.Union[str, Path],
+                    second: typing.Union[str, Path]) -> typing.Tuple[str, str]:
+        """Given texts ONE and TWO, produce a hashable key that can be used to index the
+        _data dictionary.
+        """
+        cdef str one, two
+        one, two = _comparative_form(first), _comparative_form(second)
+        if one > two:
+            one, two = two, one
+        return (one, two)
+
+
+cdef class BasicSimilarityCache(object):
     """This class is the object that manages the global cache of text similarities.
     Most subclasses of this class have not managed to improve on its performance,
     nor on requirements while maintaining decent performance (though see
@@ -93,7 +116,7 @@ class BasicSimilarityCache(object):
         except BaseException as err:
             return "< Basic Textual Similarity Cache (unknown state because %s) >" % err
 
-    def flush_cache(self):                  #cpdef
+    cpdef flush_cache(self):
         """Writes the textual similarity cache to disk, if self._dirty is True. If
         self._dirty is False, it silently returns without doing anything.
 
@@ -134,38 +157,18 @@ class BasicSimilarityCache(object):
         log_it(" ... updated!", 3)
         self._dirty = False
 
-    @staticmethod               #cpdef
-    def calculate_overlap(one: typing.Dict, two: typing.Dict) -> float:         #FIXME: what kind of Dict?
-        """Returns the percentage of chains in dictionary ONE that are also in
-        dictionary TWO.
-        """
-        overlap_count = 0
-        for which_chain in one.keys():
-            if which_chain in two: overlap_count += 1
-        return overlap_count / len(one)
-
-    @staticmethod                                                        #cdef
-    def _key_from_texts(one: typing.Union[str, Path], two: typing.Union[str, Path]) -> typing.Tuple[str, str]:
-        """Given texts ONE and TWO, produce a hashable key that can be used to index the
-        _data dictionary.
-        """
-        one, two = _comparative_form(one), _comparative_form(two)
-        if one > two:
-            one, two = two, one
-        return (one, two)
-
-    def _store_data(self, one: typing.Union[str, Path],                  #cdef
-                    two: typing.Union[str, Path],
-                    similarity: float):
+    cdef _store_data(self, one: typing.Union[str, Path],
+                     two: typing.Union[str, Path],
+                     similarity: float):
         """Store the SIMILARITY (a float between 0 and 1, weighted toward zero)
         between texts ONE and TWO in the cache.
         """
-        key = self._key_from_texts(one, two)
+        key = _key_from_texts(one, two)
         self._data[key] = {'when': time.time(), 'similarity': similarity, }
 
-    def calculate_similarity(self, one: typing.Union[str, Path],                     #cdef
-                             two: typing.Union[str, Path],
-                             markov_length: int=5) -> float:
+    cpdef float calculate_similarity(self, one: typing.Union[str, Path],
+                                     two: typing.Union[str, Path],
+                                     markov_length: int=5):
         """Come up with a score evaluating how similar the two texts are to each other.
         This actually means, more specifically, "the product of (a) the percentage of
         chains in the set of chains of length MARKOV_LENGTH constructed from text ONE
@@ -179,16 +182,16 @@ class BasicSimilarityCache(object):
         """
         log_it("calculate_similarity() called for: %s" % [one, two], 5)
         if one == two:
-            return 1                        # Well, that's easy.
+            return 1.0                      # Well, that's easy.
         chains_one = get_mappings(one, markov_length)
         chains_two = get_mappings(two, markov_length)
-        ret = self.calculate_overlap(chains_one, chains_two) * self.calculate_overlap(chains_two, chains_one)
+        ret = calculate_overlap(chains_one, chains_two) * calculate_overlap(chains_two, chains_one)
         self._store_data(one, two, ret)
         self._dirty = True
         return ret
 
-    def get_similarity(self, one: typing.Union[str, Path],             #cpdef
-                       two: typing.Union[str, Path]) -> float:
+    cpdef float get_similarity(self, one: typing.Union[str, Path],
+                               two: typing.Union[str, Path]):
         """Checks to see if the similarity between ONE and TWO is already known. If it is,
         returns that similarity. Otherwise, calculates the similarity and stores it in
         the global similarity cache, which is written at the end of the script's run.
@@ -204,7 +207,7 @@ class BasicSimilarityCache(object):
         function only takes advantage of the stored values.
         """
         # Index in lexicographical order, by actual filename, after dropping path
-        key = self._key_from_texts(one, two)
+        key = _key_from_texts(one, two)
         log_it("get_similarity() called for files: %s" % list(key), 5)
 
         if key in self._data:                       # If it's in the cache, and the data isn't stale ...
@@ -221,7 +224,7 @@ class BasicSimilarityCache(object):
         log_it(" ... not found in cache! Calculating and cacheing ...", 6)
         return self.calculate_similarity(one, two)
 
-    def build_cache(self):                                        #cdef
+    def build_cache(self):
         """Sequentially go through the corpus, text by text, forcing comparisons to all
         other texts and cacheing the results, to make sure the cache is fully
         populated. Periodically, it dumps the results to disk by updating the on-disk
@@ -248,7 +251,7 @@ class BasicSimilarityCache(object):
                 log_it("About to compare %s to %s ..." % (os.path.basename(first_text), os.path.basename(second_text)), 6)
                 _ = self.get_similarity(first_text, second_text)
 
-    def clean_cache(self):                                                       #cpdef
+    def clean_cache(self):
         """Run through the cache, checking for problems and fixing them. Work on a copy
         of the data, then rebind the copy to the original name after cleaning is done.
         """
@@ -288,27 +291,27 @@ class ShardedChainMap(collections.ChainMap):
     """
     _maximum_shard_size = 2 ** 16
 
-    def __repr__(self) -> str:                               #cpdef
+    def __repr__(self) -> str:
         try:
             return "< ShardedChainMap, in %d shards, with %d results cached >" % (len(self.maps), len(self))
         except BaseException as err:
             return "< ShardedChainMap (unknown state because %s) >" % err
 
-    def __setitem__(self,                                       #cpdef
+    def __setitem__(self,
                     key: typing.Tuple[typing.Union[str, Path], typing.Union[str, Path]],
-                    value: float):
+                    data):
         for mapping in self.maps:                           # If it's already in one of the underlying dicts, update it
             if key in mapping:
-                mapping[key] = value
+                mapping[key] = data
                 return
         for mapping in self.maps:
             if len(mapping) < self._maximum_shard_size:    # Otherwise, find a non-full shard to add it to if possible
-                mapping[key] = value
+                mapping[key] = data
                 return
         self.maps = [dict()] + self.maps                    # Otherwise, create a new shard and use it to store the value
-        self.maps[0][key] = value
+        self.maps[0][key] = data
 
-    def __delitem__(self,                                  #cpdef
+    def __delitem__(self,
                     key: typing.Tuple[typing.Union[str, Path], typing.Union[str, Path]]):
         for mapping in self.maps:
             if key in mapping:
@@ -317,7 +320,7 @@ class ShardedChainMap(collections.ChainMap):
         raise KeyError(key)
 
 
-class ChainMapSimilarityCache(BasicSimilarityCache):
+cdef class ChainMapSimilarityCache(BasicSimilarityCache):
     """A similarity cache that keeps its data in multiple shards, in order to limit
     both the file size of individual files and the amount of memory required when
     decompressing.
@@ -337,7 +340,7 @@ class ChainMapSimilarityCache(BasicSimilarityCache):
         self._data = ShardedChainMap(*shards)
         self._dirty = False
 
-    def __repr__(self) -> str:                              #cpdef
+    def __repr__(self) -> str:
         try:
             return "< Fragmented Textual Similarity Cache, in %d shards, with %d results cached >" % (len(self._data.maps), len(self._data))
         except AttributeError:
@@ -345,7 +348,7 @@ class ChainMapSimilarityCache(BasicSimilarityCache):
         except BaseException as err:
             return "< Fragmented Textual Similarity Cache (unknown state because %s) >" % err
 
-    def flush_cache(self):                                 #cpdef
+    cpdef flush_cache(self):
         """Flush the fragmented similarity cache to disk, each shard in a separate
         compressed file.
         """
@@ -376,7 +379,7 @@ class ChainMapSimilarityCache(BasicSimilarityCache):
         log_it(" ... updated!", 1)
         self._dirty = False
 
-    def clean_cache(self):                                            #cpdef
+    cpdef clean_cache(self):
         """Clean out stale and malformed data from the cache, then write it back to disk.
         Goes the entire sharded dictionary, key by key, building a new dictionary of
         validated items, then swaps that in and flushes the data to disk.
