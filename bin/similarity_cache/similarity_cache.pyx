@@ -1,6 +1,10 @@
 #! /usr/bin/env python3.5
 # -*- coding: utf-8 -*-
 # cython: language_level=3
+import os
+
+from bin.globs import poetry_corpus
+from patrick_logger import log_it
 
 __doc__ = """similarity_cache.pyx is a utility class for Patrick Mooney's LibidoMechanica
 project. It provides a class that tracks calculated "similarity" between texts
@@ -12,6 +16,12 @@ This file is part of the LibidoMechanica scripts, a project that is copyright
 ABSOLUTELY WITHOUT WARRANTY OF ANY KIND. You are welcome to use it under the
 terms of the GNU General Public License, either version 3 or (at your option)
 any later version. See the file LICENSE.md for details.
+
+A short log of optimization attempts
+* On May 6-7, a full similarity cache was built for 1720 source texts in 377
+  minutes using was a pure-Python version of this module. The similarity cache
+  occupied 39.1 MB.
+
 """
 
 import bz2
@@ -23,7 +33,7 @@ import glob
 from pathlib import Path
 
 import pickle
-import shlex
+import random
 import sys
 import time
 import typing
@@ -58,15 +68,15 @@ def _all_poems_in_comparative_form() -> typing.Dict[str, typing.Union[str, Path]
     """Get a dictionary mapping the comparative form of all poems currently in the
     corpus to their full actual filename.
     """
-    return {_comparative_form(p):os.path.abspath(p) for p in glob.glob(os.path.join(poetry_corpus, '*'))}
+    return {_comparative_form(p): os.path.abspath(p) for p in glob.glob(os.path.join(poetry_corpus, '*'))}
 
 
-cpdef float calculate_overlap(one: typing.Dict[typing.Tuple[str], typing.Dict[str, float]],
-                              two: typing.Dict[typing.Tuple[str], typing.Dict[str, float]]):
+def calculate_overlap(one: typing.Dict[typing.Tuple[str, str], typing.Dict[str, float]],
+                      two: typing.Dict[typing.Tuple[str, str], typing.Dict[str, float]]) -> float :
     """Returns the percentage of chains in dictionary ONE that are also in
     dictionary TWO.
     """
-    cdef int overlap_count = 0
+    overlap_count = 0
     for which_chain in one.keys():
         if which_chain in two: overlap_count += 1
     return overlap_count / len(one)
@@ -77,19 +87,19 @@ def _key_from_texts(first: typing.Union[str, Path],
         """Given texts ONE and TWO, produce a hashable key that can be used to index the
         _data dictionary.
         """
-        cdef str one, two
         one, two = _comparative_form(first), _comparative_form(second)
         if one > two:
             one, two = two, one
         return (one, two)
 
 
-cdef struct SimilarityEntry:
-    float when
-    float similarity
+class SimilarityEntry:
+    """float when
+    float similarity"""
+    pass
 
 
-cdef class BasicSimilarityCache(object):
+class BasicSimilarityCache(object):
     """This class is the object that manages the global cache of text similarities.
     Most subclasses of this class have not managed to improve on its performance,
     nor on requirements while maintaining decent performance (though see
@@ -104,7 +114,7 @@ cdef class BasicSimilarityCache(object):
     """
     def __init__(self, cache_file: typing.Union[Path, str]=similarity_cache_location):
         try:
-            with bz2.open(similarity_cache_location, "rb") as pickled_file:
+            with bz2.open(cache_file, "rb") as pickled_file:
                 log_it("Loading cached similarity data ...", 3)
                 self._data = pickle.load(pickled_file)
         except (OSError, EOFError, AttributeError, pickle.PicklingError) as err:
@@ -121,7 +131,7 @@ cdef class BasicSimilarityCache(object):
         except BaseException as err:
             return "< Basic Textual Similarity Cache (unknown state because %s) >" % err
 
-    cpdef flush_cache(self):
+    def flush_cache(self):
         """Writes the textual similarity cache to disk, if self._dirty is True. If
         self._dirty is False, it silently returns without doing anything.
 
@@ -162,21 +172,21 @@ cdef class BasicSimilarityCache(object):
         log_it(" ... updated!", 3)
         self._dirty = False
 
-    cdef _store_data(self, one: typing.Union[str, Path],
+    def _store_data(self, one: typing.Union[str, Path],
                      two: typing.Union[str, Path],
                      similarity: float):
         """Store the SIMILARITY (a float between 0 and 1, weighted toward zero)
         between texts ONE and TWO in the cache.
         """
-        cdef SimilarityEntry entry
+        entry = SimilarityEntry()
         entry.when = time.time()
         entry.similarity = similarity
         key = _key_from_texts(one, two)
         self._data[key] = entry
 
-    cpdef float calculate_similarity(self, one: typing.Union[str, Path],
+    def calculate_similarity(self, one: typing.Union[str, Path],
                                      two: typing.Union[str, Path],
-                                     markov_length: int=5):
+                                     markov_length: int=5) -> float:
         """Come up with a score evaluating how similar the two texts are to each other.
         This actually means, more specifically, "the product of (a) the percentage of
         chains in the set of chains of length MARKOV_LENGTH constructed from text ONE
@@ -198,8 +208,8 @@ cdef class BasicSimilarityCache(object):
         self._dirty = True
         return ret
 
-    cpdef float get_similarity(self, one: typing.Union[str, Path],
-                               two: typing.Union[str, Path]) except *:
+    def get_similarity(self, one: typing.Union[str, Path],
+                       two: typing.Union[str, Path]) -> float:
         """Checks to see if the similarity between ONE and TWO is already known. If it is,
         returns that similarity. Otherwise, calculates the similarity and stores it in
         the global similarity cache, which is written at the end of the script's run.
@@ -244,10 +254,10 @@ cdef class BasicSimilarityCache(object):
         populate itself across multiple runs: this particular method is completely
         unneeded for anything other than some testing applications.
         """
-        log_it("Building cache ...")
+        print("Building cache ...")
         for i, first_text in enumerate(sorted(glob.glob(os.path.join(poetry_corpus, '*')))):
             if i % 5 == 0:
-                log_it("  We've performed full calculations for %d texts!" % i)
+                print("  We've performed full calculations for %d texts!" % i)
                 if i % 20 == 0:
                     while self._dirty:
                         try:
@@ -256,7 +266,8 @@ cdef class BasicSimilarityCache(object):
                         except pid.PidFileError:
                             time.sleep(5)                                   # In use? Wait and try again.
             for j, second_text in enumerate(sorted(glob.glob(os.path.join(poetry_corpus, '*')))):
-                log_it("About to compare %s to %s ..." % (os.path.basename(first_text), os.path.basename(second_text)), 6)
+                log_it("About to compare %s to %s ..." % (os.path.basename(first_text), os.path.basename(
+                        second_text)), 6)
                 _ = self.get_similarity(first_text, second_text)
 
     def clean_cache(self):
@@ -264,24 +275,31 @@ cdef class BasicSimilarityCache(object):
         of the data, then rebind the copy to the original name after cleaning is done.
         """
         pruned = self._data.copy()
+        comp_form_corpus = _all_poems_in_comparative_form()
         for count, (one, two) in enumerate(self._data):
             try:
                 if count % 1000 == 0:
                     print("We're on entry # %d: that's %d %% done!" % (count, (100 * count/len(self._data))))
-                assert os.path.isfile(os.path.join(poetry_corpus, one)), "'%s' does not exist!" % one
-                assert os.path.isfile(os.path.join(poetry_corpus, two)), "'%s' does not exist!" % two
+                assert one in comp_form_corpus, "'%s' does not exist!" % one
+                assert two in comp_form_corpus, "'%s' does not exist!" % two
                 assert one <= two, "%s and %s are mis-ordered!" % (one, two)
-                assert self._data[(one, two)].when >= os.path.getmtime(os.path.join(poetry_corpus, one)), "data for '%s' is stale!" % one
-                assert self._data[(one, two)].when >= os.path.getmtime(os.path.join(poetry_corpus, two)), "data for '%s' is stale!" % two
-                _ = int(self._data[(one, two)].when)
-            except (AssertionError, ValueError, KeyError) as err:
+                assert self._data[_key_from_texts(one, two)].when >= os.path.getmtime(comp_form_corpus[one]), \
+                    "data for '%s' is stale!" % one
+                assert self._data[_key_from_texts(one, two)].when >= os.path.getmtime(comp_form_corpus[two]), \
+                    "data for '%s' is stale!" % two
+                _ = int(self._data[_key_from_texts(one, two)].when)
+                _ = self._data[_key_from_texts(one, two)].similarity
+            except (AssertionError, ValueError, KeyError, AttributeError) as err:
                 print("Removing entry: (%s, %s)    -- because: %s" % (one, two, err))
-                del pruned[(one, two)]
+                del pruned[_key_from_texts(one, two)]
                 self._dirty = True
             except BaseException as err:
                 print("Unhandled error: %s! Leaving data in place" % err)
         removed = len(self._data) - len(pruned)
-        print("Removed %d entries; that's %d %%!" % (removed, 100 * removed/len(self._data)))
+        if self._data:
+            print("Removed %d entries; that's %d %%!" % (removed, 100 * removed/len(self._data)))
+        else:
+            print("All entries removed!")
         self._data = pruned
         # We're now going to flush the newly cleaned cache directly to disk. Note that
         # we're not UPDATING THE CACHE using flush_cache(), because that would just
@@ -344,8 +362,111 @@ if force_cache_update:
     sys.exit(0)
 
 
+oldmethod = False                # Set to True when debugging to use the (much faster) old method as a fallback.
+
+def old_selection_method(available):
+    """This is the original selection method, which merely picks a set of texts at
+    random from the corpus. It is fast, but makes no attempt to select texts that
+    are similar to each other. This method of picking training texts often produces
+    poems that "feel disjointed" and that contain comparatively longer sections of
+    continuous letters from a single source text.
+
+    AVAILABLE is the complete list of available texts.
+    """
+    from generate import post_data  # This is an ugly hack, importing from a module that imports us
+    log_it(" ... according to the old (pure random choice) method")
+    post_data['tags'] += ['old textual selection method']
+    return random.sample(available, random.randint(75, 150))
+
+
+def new_selection_method(available, similarity_cache):
+    """The "new method" for choosing source texts involves picking a small number of
+    seed texts completely at random, then going through and adding to this small
+    corpus by looking for "sufficiently similar" texts to texts already in the
+    corpus. "Similarity" is here defined as "having a comparatively high number
+    of overlapping chains" as the text it's being compared to. A text has similarity
+    1.0 when compared to itself, and similarity 0.0 when it is compared to a text
+    that generates no chains in common with it (something in a different script,
+    say). Typically, two poems in English chosen more or less at random will have a
+    similarity score in the range of .015 to .07 or so.
+
+    Given the initial seed set, then, each poem not already in the set is considered
+    sequentially. "Considered" here means that each poem in the already-selected
+    corpus is given a chance to "grab" the poem under consideration; the more
+    similar the two poems are, the more likely the already-in-the-corpus poem is to
+    "grab" the new poem. This process repeats until "there are enough" poems in the
+    training corpus.
+
+    This is a slow process: it can take several minutes even on my faster computer.
+    Because the similarity calculations are comparatively slow, but many of them
+    must be performed to choose a set of training poems, the results of the
+    similarity calculations are stored in a persistent cache of similarity-
+    calculation results between runs.
+
+    AVAILABLE is the complete list of poems in the corpus.
+    SIMILARITY_CACHE is the already-loaded BasicSimilarityCache object.
+    """
+    from generate import post_data  # This is an ugly hack, importing from a module that imports us
+
+    ret = random.sample(available, random.randint(3, 7))  # Seed the pot with several random source texts.
+    post_data['seed poems'] = [os.path.basename(i) for i in ret]
+    for i in ret: available.remove(i)  # Make sure already-chosen texts are not chosen again.
+    done, candidates = False, 0
+    announced, last_count = set(), 0
+    while not done:
+        candidates += 1
+        if not available:
+            available = [f for f in glob.glob(os.path.join(poetry_corpus, '*')) if not os.path.isdir(f) and f not in ret]   # Refill the list of options if we've rejected them all.
+        current_choice = random.choice(available)
+        available.remove(current_choice)
+        changed = False
+        for i in ret:  # Give each already-chosen text a chance to "claim" the new one
+            if random.random() < (similarity_cache.get_similarity(i, current_choice) / len(ret)):
+                ret += [current_choice]
+                changed = True
+                break
+        if candidates > 10000 and len(ret) >= 75:
+            done = True
+        if candidates % 5 == 0:
+            print("    ... %d selection candidates" % candidates, 4)
+            if changed:
+                if (1 - random.random() ** 4.5) < ((len(ret) - 100) / 150):
+                    done = True
+        if candidates % 25 == 0:
+            if len(ret) > last_count:
+                print("  ... %d selected texts in %d candidates. New: %s" % (len(ret), candidates, {os.path.basename(f) for f in set(ret) ^ announced}), 3)
+                announced, last_count = set(ret), len(ret)
+            else:
+                print("  ... %d selected texts in %d candidates" % (len(ret), candidates), 3)
+        if candidates % 1000 == 0:
+            if similarity_cache._dirty: similarity_cache.flush_cache()
+    post_data["rejected training texts"] = candidates - len(ret)
+    if similarity_cache._dirty: similarity_cache.flush_cache()
+    return ret
+
+
+def get_source_texts(similarity_cache):
+    """Return a list of partially randomly selected texts to serve as the source texts
+    for the poem we're writing. There are currently two textual selection methods,
+    called "the old method" and "the new method." Each is documented in its own
+    function docstring.
+    """
+    log_it("Choosing source texts")
+    available = [f for f in glob.glob(os.path.join(poetry_corpus, '*')) if not os.path.isdir(f)]
+    if oldmethod:
+        return old_selection_method(available)
+    else:
+        return new_selection_method(available, similarity_cache)
+
+
+
+
 if __name__ == "__main__":
     # First: if command-line args are used, just clean, or build, then quit.
+
+    # These two options are mostly useful for testing, because they produce caches that are hard for the main script
+    # to understand! (Module-relative imports don't work right.) Instead, to actually generatoe the cache,
+    # run the top-level generate.py script with --clean or --build.
     if len(sys.argv) == 2:
         if sys.argv[1] in ['--clean', '-c']:
             clean_cache()
