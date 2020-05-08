@@ -176,12 +176,12 @@ import text_handling as th                              # https://github.com/pat
 
 from bin.globs import *                                 # Filesystem structure, etc.
 import bin.similarity_cache.similarity_cache as sc      # Cache of calculated textual similarities.
+from bin.similarity_cache.similarity_cache import SimilarityEntry
 
 
 patrick_logger.verbosity_level = 3
 
 syllable_dict = cmudict.dict()
-
 
 # This next is a global dictionary holding data to be archived at the end of the run. Modified constantly.
 post_data = {'tags': ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains'],
@@ -886,109 +886,14 @@ def do_final_cleaning(the_poem):
     return regularize_form(the_poem)
 
 
-def old_selection_method(available):
-    """This is the original selection method, which merely picks a set of texts at
-    random from the corpus. It is fast, but makes no attempt to select texts that
-    are similar to each other. This method of picking training texts often produces
-    poems that "feel disjointed" and that contain comparatively longer sections of
-    continuous letters from a single source text.
-
-    AVAILABLE is the complete list of available texts.
-    """
-    global post_data
-    log_it(" ... according to the old (pure random choice) method")
-    post_data['tags'] += ['old textual selection method']
-    return random.sample(available, random.randint(75, 150))
-
-def new_selection_method(available, similarity_cache):
-    """The "new method" for choosing source texts involves picking a small number of
-    seed texts completely at random, then going through and adding to this small
-    corpus by looking for "sufficiently similar" texts to texts already in the
-    corpus. "Similarity" is here defined as "having a comparatively high number
-    of overlapping chains" as the text it's being compared to. A text has similarity
-    1.0 when compared to itself, and similarity 0.0 when it is compared to a text
-    that generates no chains in common with it (something in a different script,
-    say). Typically, two poems in English chosen more or less at random will have a
-    similarity score in the range of .015 to .07 or so.
-
-    Given the initial seed set, then, each poem not already in the set is considered
-    sequentially. "Considered" here means that each poem in the already-selected
-    corpus is given a chance to "grab" the poem under consideration; the more
-    similar the two poems are, the more likely the already-in-the-corpus poem is to
-    "grab" the new poem. This process repeats until "there are enough" poems in the
-    training corpus.
-
-    This is a slow process: it can take several minutes even on my faster computer.
-    Because the similarity calculations are comparatively slow, but many of them
-    must be performed to choose a set of training poems, the results of the
-    similarity calculations are stored in a persistent cache of similarity-
-    calculation results between runs.
-
-    AVAILABLE is the complete list of poems in the corpus.
-    SIMILARITY_CACHE is the already-loaded BasicSimilarityCache object.
-    """
-    global post_data
-
-    ret = random.sample(available, random.randint(3, 7))  # Seed the pot with several random source texts.
-    post_data['seed poems'] = [os.path.basename(i) for i in ret]
-    for i in ret: available.remove(i)  # Make sure already-chosen texts are not chosen again.
-    done, candidates = False, 0
-    announced, last_count = set(), 0
-    while not done:
-        candidates += 1
-        if not available:
-            available = [f for f in glob.glob(os.path.join(poetry_corpus, '*')) if not os.path.isdir(f) and f not in ret]   # Refill the list of options if we've rejected them all.
-        current_choice = random.choice(available)
-        available.remove(current_choice)
-        changed = False
-        for i in ret:  # Give each already-chosen text a chance to "claim" the new one
-            if random.random() < (similarity_cache.get_similarity(i, current_choice) / len(ret)):
-                ret += [current_choice]
-                changed = True
-                break
-        if candidates > 10000 and len(ret) >= 75:
-            done = True
-        if candidates % 5 == 0:
-            log_it("    ... %d selection candidates" % candidates, 4)
-            if changed:
-                if (1 - random.random() ** 4.5) < ((len(ret) - 100) / 150):
-                    done = True
-        if candidates % 25 == 0:
-            if len(ret) > last_count:
-                log_it("  ... %d selected texts in %d candidates. New: %s" % (len(ret), candidates, {os.path.basename(f) for f in set(ret) ^ announced}), 3)
-                announced, last_count = set(ret), len(ret)
-            else:
-                log_it("  ... %d selected texts in %d candidates" % (len(ret), candidates), 3)
-        if candidates % 1000 == 0:
-            if similarity_cache._dirty: similarity_cache.flush_cache()
-    post_data["rejected training texts"] = candidates - len(ret)
-    if similarity_cache._dirty: similarity_cache.flush_cache()
-    return ret
-
-
-oldmethod = False                # Set to True when debugging to use the (much faster) old method as a fallback.
-def get_source_texts(similarity_cache):
-    """Return a list of partially randomly selected texts to serve as the source texts
-    for the poem we're writing. There are currently two textual selection methods,
-    called "the old method" and "the new method." Each is documented in its own
-    function docstring.
-    """
-    log_it("Choosing source texts")
-    available = [f for f in glob.glob(os.path.join(poetry_corpus, '*')) if not os.path.isdir(f)]
-    if oldmethod:
-        return old_selection_method(available)
-    else:
-        return new_selection_method(available, similarity_cache)
-
-
 def main():
     global genny, post_data
 
-    if not oldmethod:
+    if not sc.oldmethod:
         with sc.open_cache() as similarity_cache:
-            sample_texts = get_source_texts(similarity_cache)
+            sample_texts = sc.get_source_texts(similarity_cache)
     else:
-        sample_texts = get_source_texts(None)
+        sample_texts = sc.get_source_texts(None)
     log_it(" ... selected %d texts" % len(sample_texts), 2)
 
     # Next, set up the basic parameters for the run
@@ -1053,8 +958,13 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         if sys.argv[1] in ['--help', '-h']:
             print_usage()
+        elif sys.argv[1] in ['--clean', '-c']:
+            sc.clean_cache()
+        elif sys.argv[1] in ['--build', '-b']:
+            sc.build_cache()
         else:
             print_usage(1)
+
     elif len(sys.argv) > 2:
         print_usage(1)
 

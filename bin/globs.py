@@ -17,7 +17,7 @@ poetry_corpus = os.path.join(home_dir, 'poetry_corpus')
 post_archives = os.path.join(home_dir, 'archives')
 data_cache_location = os.path.join(home_dir, 'cache')
 sharded_cache_location = data_cache_location
-similarity_cache_location = os.path.join(home_dir, 'similarity_cache.pkl.bz2')
+similarity_cache_location = os.path.join(data_cache_location, 'similarity_cache.pkl.bz2')
 
 lock_file_dir = home_dir
 running_lock_name = 'running.pid'
