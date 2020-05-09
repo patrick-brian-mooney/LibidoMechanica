@@ -18,15 +18,28 @@ terms of the GNU General Public License, either version 3 or (at your option)
 any later version. See the file LICENSE.md for details.
 
 A short log of optimization attempts
-* On 6-7 May 2020, a full similarity cache was built for 1720 source texts in
+* On 7-8 May 2020, a full similarity cache was built for 1720 source texts in
   377 minutes using was a pure-Python version of this module. The similarity
   cache occupied 39.1 MB.
-* A 7 May repeat with no changes at all except in the extension of the file
+* AN 8 May repeat with no changes at all except in the extension of the file
   from .py to .pyx resulted in no appreciable improvement: 377 minutes on the
   same poetry corpus with a resulting cache of 39.1 MB.
 * Replacing a Python class that winds up taking two attributes with a cdef
-  struct that houses the same two attributes on 7 May reduced the run time to
-  317 minutes and produced a cache of 19.9 MB.
+  struct that houses the same two attributes on 8 May reduced the run time to
+  317 minutes and produced a cache of 19.9 MB. As perhaps a more useful metric,
+  it takes right about 0.5GB of RAM to load on my current laptop. Also, Cython
+  seems to be internally converting these structs to dicts somewhere, perhaps
+  when stuffing them into a dict? I have not yet looked into this.
+
+  Also, since get_source_texts and the two functions it calls have also been
+  moved to this .pyx file, it's become blindingly fast, which is a nice benefit.
+
+  Another experiment running under PyPy showed that generate.py runs
+  substantially slower and takes more memory than under CPython.
+* cdef'ing some functions and variables, then re-running on 8-9 May,
+  *increased* the run time to 344 minutes without changing the size of the
+  cache produced. This is likely a result of other things running in the
+  background overnight, though.
 
 """
 
@@ -104,7 +117,7 @@ cdef struct SimilarityEntry:
     float similarity
 
 
-class BasicSimilarityCache(object):
+cdef class BasicSimilarityCache(object):
     """This class is the object that manages the global cache of text similarities.
     Most subclasses of this class have not managed to improve on its performance,
     nor on requirements while maintaining decent performance (though see
@@ -136,7 +149,7 @@ class BasicSimilarityCache(object):
         except BaseException as err:
             return "< Basic Textual Similarity Cache (unknown state because %s) >" % err
 
-    def flush_cache(self):
+    cpdef flush_cache(self):
         """Writes the textual similarity cache to disk, if self._dirty is True. If
         self._dirty is False, it silently returns without doing anything.
 
@@ -177,7 +190,7 @@ class BasicSimilarityCache(object):
         log_it(" ... updated!", 3)
         self._dirty = False
 
-    def _store_data(self, one: typing.Union[str, Path],
+    cdef _store_data(self, one: typing.Union[str, Path],
                      two: typing.Union[str, Path],
                      similarity: float):
         """Store the SIMILARITY (a float between 0 and 1, weighted toward zero)
@@ -189,9 +202,9 @@ class BasicSimilarityCache(object):
         key = _key_from_texts(one, two)
         self._data[key] = entry
 
-    def calculate_similarity(self, one: typing.Union[str, Path],
-                                     two: typing.Union[str, Path],
-                                     markov_length: int=5) -> float:
+    cdef float calculate_similarity(self, one: typing.Union[str, Path],
+                                    two: typing.Union[str, Path],
+                                    markov_length: int=5):
         """Come up with a score evaluating how similar the two texts are to each other.
         This actually means, more specifically, "the product of (a) the percentage of
         chains in the set of chains of length MARKOV_LENGTH constructed from text ONE
@@ -213,8 +226,8 @@ class BasicSimilarityCache(object):
         self._dirty = True
         return ret
 
-    def get_similarity(self, one: typing.Union[str, Path],
-                       two: typing.Union[str, Path]) -> float:
+    cpdef float get_similarity(self, one: typing.Union[str, Path],
+                               two: typing.Union[str, Path]):
         """Checks to see if the similarity between ONE and TWO is already known. If it is,
         returns that similarity. Otherwise, calculates the similarity and stores it in
         the global similarity cache, which is written at the end of the script's run.
@@ -247,7 +260,7 @@ class BasicSimilarityCache(object):
         log_it(" ... not found in cache! Calculating and cacheing ...", 6)
         return self.calculate_similarity(one, two)
 
-    def build_cache(self):
+    cpdef build_cache(self):
         """Sequentially go through the corpus, text by text, forcing comparisons to all
         other texts and cacheing the results, to make sure the cache is fully
         populated. Periodically, it dumps the results to disk by updating the on-disk
@@ -284,16 +297,16 @@ class BasicSimilarityCache(object):
         for count, (one, two) in enumerate(self._data):
             try:
                 if count % 1000 == 0:
-                    print("We're on entry # %d: that's %d %% done!" % (count, (100 * count/len(self._data))))
+                    print("We're on entry # %d: that's %.3f %% done!" % (count, (100 * count/len(self._data))))
                 assert one in comp_form_corpus, "'%s' does not exist!" % one
                 assert two in comp_form_corpus, "'%s' does not exist!" % two
                 assert one <= two, "%s and %s are mis-ordered!" % (one, two)
-                assert self._data[_key_from_texts(one, two)].when >= os.path.getmtime(comp_form_corpus[one]), \
+                assert self._data[_key_from_texts(one, two)]['when'] >= os.path.getmtime(comp_form_corpus[one]), \
                     "data for '%s' is stale!" % one
-                assert self._data[_key_from_texts(one, two)].when >= os.path.getmtime(comp_form_corpus[two]), \
+                assert self._data[_key_from_texts(one, two)]['when'] >= os.path.getmtime(comp_form_corpus[two]), \
                     "data for '%s' is stale!" % two
-                _ = int(self._data[_key_from_texts(one, two)].when)
-                _ = self._data[_key_from_texts(one, two)].similarity
+                _ = int(self._data[_key_from_texts(one, two)]['when'])
+                _ = self._data[_key_from_texts(one, two)]['similarity']
             except (AssertionError, ValueError, KeyError, AttributeError) as err:
                 print("Removing entry: (%s, %s)    -- because: %s" % (one, two, err))
                 del pruned[_key_from_texts(one, two)]
@@ -302,7 +315,7 @@ class BasicSimilarityCache(object):
                 print("Unhandled error: %s! Leaving data in place" % err)
         removed = len(self._data) - len(pruned)
         if self._data:
-            print("Removed %d entries; that's %d %%!" % (removed, 100 * removed/len(self._data)))
+            print("Removed %s entries; that's %s %%!" % (removed, 100 * removed/len(self._data)))
         else:
             print("All entries removed!")
         self._data = pruned
@@ -433,16 +446,16 @@ def new_selection_method(available, similarity_cache):
         if candidates > 10000 and len(ret) >= 75:
             done = True
         if candidates % 5 == 0:
-            print("    ... %d selection candidates" % candidates, 4)
+            print("    ... %d selection candidates" % candidates)
             if changed:
                 if (1 - random.random() ** 4.5) < ((len(ret) - 100) / 150):
                     done = True
         if candidates % 25 == 0:
             if len(ret) > last_count:
-                print("  ... %d selected texts in %d candidates. New: %s" % (len(ret), candidates, {os.path.basename(f) for f in set(ret) ^ announced}), 3)
+                print("  ... %d selected texts in %d candidates. New: %s" % (len(ret), candidates, {os.path.basename(f) for f in set(ret) ^ announced}))
                 announced, last_count = set(ret), len(ret)
             else:
-                print("  ... %d selected texts in %d candidates" % (len(ret), candidates), 3)
+                print("  ... %d selected texts in %d candidates" % (len(ret), candidates))
         if candidates % 1000 == 0:
             if similarity_cache._dirty: similarity_cache.flush_cache()
     post_data["rejected training texts"] = candidates - len(ret)
