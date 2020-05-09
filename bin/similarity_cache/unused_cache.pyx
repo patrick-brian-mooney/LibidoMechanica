@@ -164,6 +164,132 @@ class MemoryHogSimilarityCache(sc.BasicSimilarityCache):
         return self._similarity_data[key]
 
 
+class ShardedChainMap(collections.ChainMap):
+    """Variant of ChainMap that allows direct updates to inner scopes. Shamelessly
+    stolen from the Python documentation for the collections module in the standard
+    library, then further adapted.
+    """
+    _maximum_shard_size = 2 ** 16
+
+    def __repr__(self) -> str:
+        try:
+            return "< ShardedChainMap, in %d shards, with %d results cached >" % (len(self.maps), len(self))
+        except BaseException as err:
+            return "< ShardedChainMap (unknown state because %s) >" % err
+
+    def __setitem__(self,
+                    key: typing.Tuple[typing.Union[str, Path], typing.Union[str, Path]],
+                    data):
+        for mapping in self.maps:                           # If it's already in one of the underlying dicts, update it
+            if key in mapping:
+                mapping[key] = data
+                return
+        for mapping in self.maps:
+            if len(mapping) < self._maximum_shard_size:    # Otherwise, find a non-full shard to add it to if possible
+                mapping[key] = data
+                return
+        self.maps = [dict()] + self.maps                    # Otherwise, create a new shard and use it to store the value
+        self.maps[0][key] = data
+
+    def __delitem__(self,
+                    key: typing.Tuple[typing.Union[str, Path], typing.Union[str, Path]]):
+        for mapping in self.maps:
+            if key in mapping:
+                del mapping[key]
+                return
+        raise KeyError(key)
+
+
+cdef class ChainMapSimilarityCache(sc.BasicSimilarityCache):
+    """A similarity cache that keeps its data in multiple shards, in order to limit
+    both the file size of individual files and the amount of memory required when
+    decompressing.
+    """
+    def __init__(self):                                     #cpdef
+        if not os.path.isdir(sharded_cache_location):
+            print("Directory for storing similarity cache shards does not exist, creating ...")
+            os.mkdir(sharded_cache_location)
+        shards = list()
+        for shard in sorted(glob.glob(os.path.join(sharded_cache_location, '*'))):
+            try:
+                with bz2.open(shard, mode='rb') as pickled_file:
+                    print("Loading cached similarity data from shard %s ..." % shlex.quote(shard))
+                    shards.append(pickle.load(pickled_file))
+            except (OSError, EOFError, AttributeError, pickle.PicklingError) as err:
+                print("WARNING! Unable to load cached similarity data because %s. Skipping this shard ..." % err)
+        self._data = ShardedChainMap(*shards)
+        self._dirty = False
+
+    def __repr__(self) -> str:
+        try:
+            return "< Fragmented Textual Similarity Cache, in %d shards, with %d results cached >" % (len(self._data.maps), len(self._data))
+        except AttributeError:
+            return "< Fragmented Textual Similarity Cache (not fully initialized: no data attached) >"
+        except BaseException as err:
+            return "< Fragmented Textual Similarity Cache (unknown state because %s) >" % err
+
+    cpdef flush_cache(self):
+        """Flush the fragmented similarity cache to disk, each shard in a separate
+        compressed file.
+        """
+        if not self._dirty:
+            log_it("Skipping cache update: no changes made!", 3)
+            return
+        log_it("Updating similarity data cache on disk ...", 1)
+        shards_created = set()
+        for shard_num, shard in enumerate(self._data.maps):
+            try:
+                shard_name = os.path.join(sharded_cache_location, "%016d.dat" % shard_num)
+                log_it("      ... dumping %d items into shard with name %s" % (len(shard), shlex.quote(shard_name)), 2)
+                with bz2.open(shard_name, mode="wb") as pickled_file:
+                    pickle.dump(shard, pickled_file, protocol=1)
+                shards_created.add(os.path.abspath(shard_name))
+            except BaseException as err:
+                log_it("WARNING! Unable to dump shard at %s because %s. That data is lost!" % (shlex.quote(shard_name), err))
+        extra_shards = [os.path.abspath(i) for i in sorted(glob.glob(os.path.join(sharded_cache_location, "*"))) if os.path.abspath(i) not in shards_created]
+        if extra_shards:
+            log_it("WARNING: %d leftover shards detected in cache directory! Deleting ..." % len(extra_shards), 1)
+            log_it("Extra shards are: %s" % extra_shards, 2)
+            for f in sorted(extra_shards):
+                log_it("Deleting %s" % shlex.quote(f), 3)
+                try:
+                    os.unlink(f)
+                except BaseException as err:
+                    log_it("WARNING! Unable to delete extraneous shard %s because %s!" % (f, err))
+        log_it(" ... updated!", 1)
+        self._dirty = False
+
+    cpdef clean_cache(self):
+        """Clean out stale and malformed data from the cache, then write it back to disk.
+        Goes the entire sharded dictionary, key by key, building a new dictionary of
+        validated items, then swaps that in and flushes the data to disk.
+        """
+        current_texts = _all_poems_in_comparative_form()
+        entries_validated = 0
+        pruned = ShardedChainMap()
+        for key in self._data:
+            try:
+                assert key not in pruned, "Duplicate key [ %s ] found! ... cleaning." % (key, )
+                one, two = key
+                assert one <= two, "texts in key %s are mis-ordered!" % list(key)
+                assert one in current_texts, "%s no longer exists on disk!" % one
+                assert two in current_texts, "%s no longer exists on disk!" % two
+                assert self._data[key].when >= os.path.getmtime(current_texts[one]), "data for '%s' is stale!" % current_texts[one]
+                assert self._data[key].when >= os.path.getmtime(current_texts[two]), "data for '%s' is stale!" % current_texts[two]
+                _ = float(self._data[key].when)
+                # If we made it this far ...
+                pruned[key] = self._data[key]
+            except (AssertionError, ValueError, KeyError, OSError) as err:
+                print("Removing entry: [ %s ]    -- because: %s" % (key, err))
+                self._dirty = True
+            entries_validated += 1
+            if entries_validated % 1000 == 0:
+                print("We've validated %d entries, that's %.04f%%!" % (entries_validated, 100*(entries_validated/len(self._data))))
+        entries_cleaned = len(self._data) - len(pruned)
+        print("DONE! Eliminated %d stale entries (that's %.04f%%)." % (entries_cleaned, 100 * (entries_cleaned/len(self._data))))
+        self._data = pruned
+        self.flush_cache()
+
 class VerySlowSimilarityCache(sc.BasicSimilarityCache):
     """This BasicSimilarityCache is a singleton object that manages the global cache of the
     results of similarity calculations. Calculating the similarity between two texts
@@ -173,8 +299,9 @@ class VerySlowSimilarityCache(sc.BasicSimilarityCache):
     Unlike the previous iteration, this is not implemented under the hood as a
     sorted tuple-indexed dictionary yielding another dictionary: this is a pair
     of pandas DataFrames, so the calculations and cacheing should work much more
-    quickly than before. Also unlike its superclass, flushing the cache to disk
-    overwrites, rather than
+    quickly than before. (EDIT. One would think. This is still quite slow.) Also
+    unlike its superclass, flushing the cache to disk overwrites, rather than
+    updates, the data.
 
     Interesting object attributes:
       * self._dirty             has the data changed since it was last written to
