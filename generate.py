@@ -176,7 +176,6 @@ import text_handling as th                              # https://github.com/pat
 
 from bin.globs import *                                 # Filesystem structure, etc.
 import bin.similarity_cache.similarity_cache as sc      # Cache of calculated textual similarities.
-from bin.similarity_cache.similarity_cache import SimilarityEntry
 
 
 patrick_logger.verbosity_level = 3
