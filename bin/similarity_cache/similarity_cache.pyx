@@ -18,9 +18,15 @@ terms of the GNU General Public License, either version 3 or (at your option)
 any later version. See the file LICENSE.md for details.
 
 A short log of optimization attempts
-* On May 6-7, a full similarity cache was built for 1720 source texts in 377
-  minutes using was a pure-Python version of this module. The similarity cache
-  occupied 39.1 MB.
+* On 6-7 May 2020, a full similarity cache was built for 1720 source texts in
+  377 minutes using was a pure-Python version of this module. The similarity
+  cache occupied 39.1 MB.
+* A 7 May repeat with no changes at all except in the extension of the file
+  from .py to .pyx resulted in no appreciable improvement: 377 minutes on the
+  same poetry corpus with a resulting cache of 39.1 MB.
+* Replacing a Python class that winds up taking two attributes with a cdef
+  struct that houses the same two attributes on 7 May reduced the run time to
+  317 minutes and produced a cache of 19.9 MB.
 
 """
 
@@ -93,10 +99,9 @@ def _key_from_texts(first: typing.Union[str, Path],
         return (one, two)
 
 
-class SimilarityEntry:
-    """float when
-    float similarity"""
-    pass
+cdef struct SimilarityEntry:
+    float when
+    float similarity
 
 
 class BasicSimilarityCache(object):
@@ -178,7 +183,7 @@ class BasicSimilarityCache(object):
         """Store the SIMILARITY (a float between 0 and 1, weighted toward zero)
         between texts ONE and TWO in the cache.
         """
-        entry = SimilarityEntry()
+        cdef SimilarityEntry entry
         entry.when = time.time()
         entry.similarity = similarity
         key = _key_from_texts(one, two)
@@ -230,14 +235,14 @@ class BasicSimilarityCache(object):
 
         if key in self._data:                       # If it's in the cache, and the data isn't stale ...
             entry = self._data[key]
-            if entry.when < os.path.getmtime(one):
+            if entry['when'] < os.path.getmtime(one):
                 log_it("  ... but cached data is stale relative to %s !" % one, 6)
                 return self.calculate_similarity(one, two)
-            if entry.when < os.path.getmtime(two):
+            if entry['when'] < os.path.getmtime(two):
                 log_it("  ... but cached data is stale relative to %s !" % two, 6)
                 return self.calculate_similarity(one, two)
             log_it(" ... returning cached value!", 6)
-            return entry.similarity
+            return entry['similarity']
 
         log_it(" ... not found in cache! Calculating and cacheing ...", 6)
         return self.calculate_similarity(one, two)
