@@ -74,7 +74,7 @@ def get_mappings(f: typing.Union[str, Path],
                  markov_length: int) -> tg.MarkovChainTextModel:
     """Trains a generator, then returns the calculated mappings."""
     log_it("get_mappings() called for file %s" % f, 5)
-    return pg.PoemGenerator(training_texts=[f], markov_length=markov_length).chains.the_mapping
+    return pg.PoemGenerator(training_texts=[f], markov_length=markov_length).chains.mapping
 
 
 @functools.lru_cache(maxsize=2048)
