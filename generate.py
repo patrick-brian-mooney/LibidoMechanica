@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.5
+#!/usr/bin/env python3.8
 # -*- coding: utf-8 -*-
 """generate.py creates the content at LibidoMechanica.tumblr.com, which is a
 blog consisting of automatically written "love poetry" created by this script.
