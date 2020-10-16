@@ -233,6 +233,7 @@ def manually_count_syllables(word):
         count += 1
     return count
 
+
 def syllable_count(word):
     """Do a reasonably good job of determining the number of syllables in WORD, a word
     in English. Uses the CMU corpus if it contains the word, or a best-guess
@@ -244,6 +245,7 @@ def syllable_count(word):
     except KeyError as err:
         log_it("Word %s is apparently not in CMUDict: %s" % (shlex.quote(word), err), 5)
         return manually_count_syllables(w)
+
 
 def is_prime(n):
     """Return True if N is prime, false otherwise. "Prime" is here defined specifically
@@ -259,6 +261,7 @@ def is_prime(n):
 def lines_without_stanza_breaks(the_poem):
     """Returns a *list* of lines from THE_POEM, ignoring any blank lines."""
     return [l for l in the_poem.split('\n') if len(l.strip()) > 0]
+
 
 def total_lines(the_poem):
     """Returns the total number of non-empty lines in the poem."""
@@ -289,6 +292,7 @@ def remove_single_lines(the_poem, combination_probability=0.85):
         else:
             i += 1
     return '\n\n'.join(['\n'.join(s) for s in stanzas])
+
 
 def regularize_form(the_poem):
     """Tries to find a form that gives THE_POEM a more or less regular syllables-per-
@@ -557,6 +561,7 @@ def count_previous_untitled_poems():
     log_it("Counted previous untitled poems: %d" % ret, 4)
     return ret
 
+
 def balance_punctuation(the_poem, opening_char, closing_char):
     """Makes sure that paired punctuation (smart quotes, parentheses, brackets) in the
     poem are 'balanced.' If not, it attempts to correct it.
@@ -628,6 +633,7 @@ def balance_punctuation(the_poem, opening_char, closing_char):
             the_poem = ''.join(indexed_poem)
     log_it("   ... after balancing, there are %d/%d punctuation marks." % (the_poem.count(opening_char), the_poem.count(closing_char)), 3)
     return the_poem
+
 
 def HTMLify(the_poem):
     """Return a version of THE_POEM that ends lines with <br /> and wraps stanzas
