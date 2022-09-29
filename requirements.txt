@@ -50,7 +50,7 @@ lazr.uri==1.0.3
 libvirt-python==6.1.0
 louis==3.12.0
 lxml==4.5.0
-Mako==1.1.0
+Mako==1.2.2
 Markdown==3.1.1
 MarkupSafe==1.1.0
 mechanize==0.4.5
