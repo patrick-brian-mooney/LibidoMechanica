@@ -16,7 +16,7 @@ import bz2, contextlib, glob, pickle, shlex, subprocess, time
 from typing import List
 
 import generate
-from bin.globs import *
+from globs import *
 import text_generator as tg
 
 import text_handling as th                          # https://github.com/patrick-brian-mooney/python-personal-library/
