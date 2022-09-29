@@ -12,16 +12,15 @@ LICENSE.md for details.
 import array
 import bz2
 import glob
-import os
 from pathlib import Path
 import pickle
 import time
 import typing
 
 
-from bin.globs import *
-from bin.globs import similarity_cache_location, poetry_corpus
-from bin.similarity_cache import similarity_cache as sc
+from globs import *
+from globs import similarity_cache_location, poetry_corpus
+from cython_experiments.similarity_cache import similarity_cache as sc
 
 
 import pandas as pd                                     # https://pandas.pydata.org/

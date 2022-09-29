@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.8
+#!/LibidoMechanica/bin/python3
 # -*- coding: utf-8 -*-
 """generate.py creates the content at LibidoMechanica.tumblr.com, which is a
 blog consisting of automatically written "love poetry" created by this script.
@@ -174,8 +174,8 @@ from social_media_auth import libidomechanica_client    # Unshared file that con
 import poetry_generator as pg                           # https://github.com/patrick-brian-mooney/markov-sentence-generator
 import text_handling as th                              # https://github.com/patrick-brian-mooney/personal-library
 
-from bin.globs import *                                 # Filesystem structure, etc.
-import bin.similarity_cache.similarity_cache as sc      # Cache of calculated textual similarities.
+from globs import *                                 # Filesystem structure, etc.
+import cython_experiments.similarity_cache.similarity_cache as sc      # Cache of calculated textual similarities.
 
 
 patrick_logger.verbosity_level = 3

@@ -1,9 +1,12 @@
 #! /usr/bin/env python3.5
 # -*- coding: utf-8 -*-
 # cython: language_level=3
-import os
 
-from bin.globs import poetry_corpus
+
+import contextlib
+import random
+
+
 from patrick_logger import log_it
 
 __doc__ = """similarity_cache.pyx is a utility class for Patrick Mooney's LibidoMechanica
@@ -44,15 +47,12 @@ A short log of optimization attempts
 """
 
 import bz2
-import collections
-import contextlib
 import functools
 import glob
 
 from pathlib import Path
 
 import pickle
-import random
 import sys
 import time
 import typing
@@ -61,7 +61,7 @@ import typing
 import pid                                              # https://pypi.python.org/pypi/pid/
 
 
-from bin.globs import *
+from globs import *
 import text_generator as tg
 import poetry_generator as pg
 
