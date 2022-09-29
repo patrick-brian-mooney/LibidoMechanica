@@ -70,7 +70,7 @@ pbr==5.4.5
 pexpect==4.6.0
 Pillow==7.0.0
 podcastparser==0.6.4
-protobuf==3.6.1
+protobuf==3.18.3
 psutil==5.5.1
 pycairo==1.16.2
 pychm==0.8.6
