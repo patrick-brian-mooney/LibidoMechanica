@@ -156,6 +156,7 @@ from pathlib import Path
 import pprint
 import random
 import re
+import subprocess
 import sys
 import typing
 import unicodedata
@@ -363,6 +364,34 @@ def print_usage(exit_code: int = 0) -> None:
     log_it("INFO: print_usage() was called", 4)
     print(__doc__)
     sys.exit(exit_code)
+
+
+def get_last_git_commit_id() -> str:
+    """Return the commit ID for the most recent Git commit.
+
+    #FIXME! This is kind of hacky.
+    """
+    cmd = """git log -1 | grep ^commit | cut -d " " -f 2"""
+    return subprocess.run(cmd, shell=True, stderr=subprocess.STDOUT, stdout=subprocess.PIPE, universal_newlines=True).stdout.strip()
+
+
+def get_last_script_change_date() -> str:
+    """Return the date and time this script -- this one, that you are reading right now
+    -- was last modified.
+    """
+    epoch_time = Path(__file__).stat().st_mtime
+    return datetime.datetime.fromtimestamp(epoch_time).isoformat(" ")
+
+
+def get_script_version_info() -> typing.Dict[str, typing.Dict[str, str]]:
+    """Retuns a dictionary with information about the current script version.
+    """
+    return {
+        'LibidoMechanica script version': {
+            'generate.py commit ID': get_last_git_commit_id(),
+            'generate.py last modification time': get_last_script_change_date(),
+        }
+    }
 
 
 @functools.lru_cache(maxsize=None)
@@ -622,7 +651,7 @@ def strip_invalid_chars(the_poem: str) -> str:
     takes an entire poem as input (THE_POEM) and returns a poem entirely
     stripped of all such characters.
     """
-    log_it("INFO: stripping invalid characters from the poem", 2)
+    log_it("INFO: stripping invalid characters from the text", 2)
     invalids = ['_', '*']
     return ''.join([s for s in the_poem if not s in invalids])
 
@@ -1481,6 +1510,7 @@ def write_sequence(genny: pg.PoemGenerator,
     form_name = random.choice(list(poem_forms.keys()))
     form_description = random.choice(poem_forms[form_name])
     post_data['form'] = {'name': form_name, 'description': copy.deepcopy(form_description)}
+    post_data['tags'].append(form_name)
 
     separators = get_separators(num_poems)
     if separators:
@@ -1528,11 +1558,12 @@ def main() -> None:
     """Select source poems, train a generator on them, and generate a poem.
     """
     global genny, post_data, unused_lines
+    post_data['script info'] = get_script_version_info()
 
     # Set up the basic parameters for the run
     sample_texts = [ th.remove_prefix(t, "Link to ").strip() for t in choose_texts() ]
     chain_length = round(min(max(random.normalvariate(6, 0.8), 3), 10))
-    post_data['tags'] += [f'Markov chain length: {chain_length}', f'{len(sample_texts)} texts' ]
+    post_data['tags'] += [f'Markov chain length: {chain_length}', f'{len(sample_texts)} texts']
 
     log_it("INFO: about to set up and train text generator ...")
     genny = pg.PoemGenerator(name='Libido Mechanica poetry generator', training_texts=sample_texts,
@@ -1579,7 +1610,7 @@ def main() -> None:
     post_data['sources'] = sorted(sample_texts)
 
     archive_post_data()
-    log_it("INFO: We're done")
+    log_it("INFO: We're done\n\n\n")
 
 
 
