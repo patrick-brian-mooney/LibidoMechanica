@@ -145,19 +145,24 @@ LICENSE.md for more details.
 
 
 import bz2
+import collections
+import copy
 import datetime
 import functools
-import glob
 import json
+
+from pathlib import Path
+
 import pprint
 import random
 import re
-import shlex
 import sys
+import typing
 import unicodedata
 
 import pid                                              # https://pypi.python.org/pypi/pid/
 
+from num2words import num2words                         # https://pypi.org/project/num2words/
 from nltk.corpus import cmudict                         # nltk.org
 
 import pyximport; pyximport.install()                   # http://cython.org
@@ -171,16 +176,40 @@ import social_media                                     # https://github.com/pat
 from social_media_auth import libidomechanica_client    # Unshared file that contains authentication tokens.
 
 
+import text_generator as tg                             # https://github.com/patrick-brian-mooney/markov-sentence-generator
 import poetry_generator as pg                           # https://github.com/patrick-brian-mooney/markov-sentence-generator
-import text_handling as th                              # https://github.com/patrick-brian-mooney/personal-library
 
-from globs import *                                 # Filesystem structure, etc.
+import text_handling as th                              # https://github.com/patrick-brian-mooney/personal-library
+import check_capitalization as cc                       # https://github.com/patrick-brian-mooney/python-personal-library
+
+from globs import *                                     # Filesystem structure, etc.
 import cython_experiments.similarity_cache.similarity_cache as sc      # Cache of calculated textual similarities.
 
 
 patrick_logger.verbosity_level = 3
 
-syllable_dict = cmudict.dict()
+unused_lines = collections.deque()
+
+base_dir = Path(__file__).parent
+
+cache_dir = base_dir / 'cache'
+syllables_cache = cache_dir / 'syllables.json'
+
+archive_dir = base_dir / 'archives'
+max_archives_in_sub_dir = 1000
+
+# Load the supplemental syllabification data.
+try:
+    more_syllable_data = json.loads(syllables_cache.read_text(encoding='utf-8'))
+except (json.JSONDecodeError, IOError):
+    more_syllable_data = {
+        'corrected': dict(),
+        'validated': dict(),
+        'computed': dict(),
+    }
+more_syllable_data['all'] = collections.ChainMap(more_syllable_data['corrected'], more_syllable_data['validated'],
+                                                 more_syllable_data['computed'])
+
 
 # This next is a global dictionary holding data to be archived at the end of the run. Modified constantly.
 post_data = {'tags': ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains'],
@@ -191,8 +220,143 @@ post_data = {'tags': ['poetry', 'automatically generated text', 'Patrick Mooney'
 
 genny = None            # We'll reassign this soon. We want it to be defined in the global namespace early, though.
 
+poem_defaults = {
+    'max stanzas': 20,          # FIXME: for now.
+    'min stanzas': 1,
+    'indent pattern': [0,]
+}
 
-def print_usage(exit_code=0):
+poem_forms = {
+    'ballad':
+        [
+            {'stanza length': [4, 4, 4, 4, 4, 4, 4, 4, 6, 8, 8,],           # pick one of these numbers: how long will a stanza be, in lines?
+             'syllables in foot': [2, 2, 2, 2, 2, 2, 2, 3],                 # possible numbers of syllables in a foot
+             'meter pattern': [4, 3],       # METRICAL FEET, not syllables, per line. [4, 3] means a four-foot line is followed by a three-foot line, and this pattern repeats through the stanza.
+             'indent pattern': [0, 4],      # Number of spaces before each line in the poem. Cycles when exhausted. Need not match up with stanza length.
+             },
+        ],
+    'sonnet':
+        [
+            {'stanza length': [14,],
+             'syllables in foot': [2, 2, 2, 2, 2, 2, 3,],                   # iambic pentameter is most common form
+             'meter pattern': [5,],                                         # FIXME: make tetrameter sonnets also possible!
+             'max stanzas': 1,
+             },
+        ],
+    'Meredith sonnet':
+        [
+            {'stanza length': [16,],
+             'syllables in foot': [2,],
+             'meter pattern': [5,],
+             'max stanzas': 1,
+             'indent pattern': [0, 2, 2, 0,],
+             }
+        ],
+    'limerick':
+        [
+            {'stanza length': [5,],
+             'syllables in foot': [3,],                                     # Anapestic trimeter, trimeter, dimeter, dimeter, trimeter.
+             'meter pattern': [3, 3, 2, 2, 3],
+             'max stanzas': 1,
+             'indent pattern': [0, 0, 3, 3, 0,],
+             },
+        ],
+    'cinquain':
+        [
+            {'stanza length': [5,],
+             'syllables in foot': [1,],
+             'meter pattern': [2, 4, 6, 8, 2],
+             'max stanzas': 1,
+             },
+        ],
+    'curtal sonnet':
+        [
+            {'stanza length': [11,],
+             'syllables in foot': [2,],                                     # Iambic pentameter
+             'meter pattern': [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 1],            # Last line is actually a single spondee, but we don't yet have a way to represent meter.
+             'max stanzas': 1,
+             },
+        ],
+    'kimo':
+        [
+            {'stanza length': [3,],
+             'syllables in foot': [1,],
+             'meter pattern': [10, 7, 6],
+             'max stanzas': 1,
+             }
+        ],
+    'Kelly lune':
+        [
+            {'stanza length': [3,],
+             'syllables in foot': [1,],
+             'meter pattern': [5, 3, 5],
+             'max stanzas': 1,
+             },
+        ],
+    'rispetto':
+        [
+            {'stanza length': [4,],                                         # version 1: two iambic tetrameter quatrains
+             'syllables in foot': [2,],
+             'meter pattern': [4,],
+             'min stanzas': 2,
+             'max stanzas': 2,
+             },
+            {'stanza length': [8,],                                         # version 2: one stanza, eight hendecasyllabic lines
+             'syllables in foot': [1,],
+             'meter pattern': [11,],
+             'max stanzas': 1,
+             },
+        ],
+    'tanka':
+        [
+            {'stanza length': [5,],
+             'syllables in foot': [1,],
+             'meter pattern': [5, 7, 5, 7, 7,],
+             'max stanzas': 1,
+             },
+        ],
+    'treochair':
+        [
+            {'stanza length': [3,],
+             'syllables in foot': [1,],
+             'meter pattern': [3, 7, 7],
+             },
+        ],
+    'tricube':
+        [
+            {'stanza length': [3,],
+             'syllables in foot': [1,],
+             'meter pattern': [3,],
+             'max stanzas': 3,
+             'min stanzas': 3,
+             },
+        ],
+}
+
+punct_with_no_space_before = """.?,;!:#-‐‑‒–—―%&)*+/@]^_}""".strip()
+punct_with_no_space_after = """-‐‑‒–—―&(+/<=>@[_`{~""".strip()
+
+opening_bracketers = ( "‘", '“', '(', '[', '{', )
+closing_bracketers = ( "’", '”', ')', ']', '}', )
+
+English_straight_single_quote = "'"
+English_straight_double_quote = '"'
+
+prohibs = [
+    '@',                                                # email addresses are hard to syllabify and just look ugly in poetry.
+    '_',                                                # reject underlines, mostly because they are often usernames
+    'http://', 'https://', 'www',                       # URLs occasionally appear, but let's reject them too.
+    ''.join([chr(i) for i in [99, 117, 110, 116]]),     # the C word
+    ''.join([chr(i) for i in [116, 119, 97, 116]]),     # another slur for women, with a similar meaning
+    ''.join([chr(i) for i in [102, 97, 103]]),          # the 3-letter F-word
+]
+
+phoneme_dict = dict(cmudict.entries())
+
+NEWLINE = "\n"
+
+
+def print_usage(exit_code: int = 0) -> None:
     """Print the docstring as a usage message to stdout, then quit with status code
     EXIT_CODE.
     """
@@ -201,15 +365,8 @@ def print_usage(exit_code=0):
     sys.exit(exit_code)
 
 
-def factors(n):
-    """Return a list of the factors of a number. Based on code at
-    < https://stackoverflow.com/a/6800214 >.
-    """
-    assert (int(n) == n and n > 1), "ERROR: factors() called on %s, which is not a positive integer" % n
-    return sorted(list(set(functools.reduce(list.__add__, ([i, n//i] for i in range(1, int(n**0.5) + 1) if n % i == 0)))))
-
-
-def manually_count_syllables(word):
+@functools.lru_cache(maxsize=None)
+def manually_count_syllables(word: str) -> int:
     """Clearly not perfect, but better than nothing.
 
     #FIXME: we should be keeping an additional list for words not in cmudict.
@@ -234,337 +391,405 @@ def manually_count_syllables(word):
     return count
 
 
-def syllable_count(word):
+@functools.lru_cache(maxsize=256)
+def eratosthenes_sieve(upper_limit: int = 101) -> typing.List[int]:
+    """Generate a list of primes greater than zero but no larger than UPPER_LIMIT,
+    using the Sieve of Eratosthenes.
+    """
+    ret = set(range(2, 1 + upper_limit))
+    for i in range(2, 1 + upper_limit):
+        if i in ret:                                    # If I is currently in ret, we've hit a prime, i.e. a number that hasn't yet been discarded.
+            for j in range(2, 1 + upper_limit//i):      # When J=1, I*J is a prime number. Don't discard it.
+                ret.discard(j * i)                      # Discard all multiples of J less than or equal to UPPER_LIMIT.
+    return sorted(ret)
+
+
+def _flatten_list(l: typing.Iterable) -> typing.Generator[object, None, None]:
+    """Regardless of how deep the list L is, return a list that has the non-list atoms
+    that compose the list L. If L contains any lists, the returned list will contain
+    the ELEMENTS of those sublists, rather than the sublists themselves. No matter
+    how deeply nested L is, the returned list will not contain any lists, but only
+    the atoms of those lists.
+
+    Note that this actually returns a generator expression, not a list, and so
+    using the non-underscore convenience wrapper below might be a good idea
+    sometimes.
+    """
+    assert isinstance(l, collections.abc.Iterable)
+    for elem in l:
+        if isinstance(elem, collections.abc.Iterable) and not isinstance(elem, (str, bytes)):
+            for sub in _flatten_list(elem):
+                yield sub
+        else:
+            yield elem
+
+
+def flatten_list(l: typing.Iterable) -> typing.List[object]:
+    """Convenience wrapper for _flatten_list(), above. Returns an actual list, which
+    is guaranteed to contain no other lists.
+    """
+    return list(_flatten_list(l))
+
+
+@functools.lru_cache(maxsize=128)
+def might_be_an_int(what: typing.Any) -> bool:
+    """Return True if WHAT can be coerced to an integer, or False otherwise.
+
+    Returns True, not an integer.
+    """
+    try:
+        _ = int(what)
+        return True
+    except (TypeError, ValueError,):
+        return False
+
+
+def int_to_roman(input: int) -> str:
+    """ Convert an integer to a Roman numeral. This was blatantly stolen (with small
+    adaptations) from the O'Reilly Python Cookbook:
+    https://www.oreilly.com/library/view/python-cookbook/0596001673/ch03s24.html.
+    """
+    if not isinstance(input, type(1)):
+        raise TypeError("expected integer, got %s" % type(input))
+    if not 0 < input < 4000:
+        raise ValueError("Argument must be between 1 and 3999")
+    ints = (1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1)
+    nums = ('M', 'CM', 'D', 'CD', 'C', 'XC', 'L', 'XL', 'X', 'IX', 'V', 'IV', 'I')
+    result = []
+    for i in range(len(ints)):
+        count = int(input / ints[i])
+        result.append(nums[i] * count)
+        input -= ints[i] * count
+    return ''.join(result)
+
+
+def ordinal_description(number: int,
+                        capitalize_first: bool = False,
+                        negative_indicator: str = "negative") -> str:
+    """Generates an English ordinal description of NUMBER. For instance, if NUMBER is
+    3, this function returns "third". If CAPITALIZE_FIRST is True, capitalizes the
+    first letter. If NEGATIVE_INDICATOR is specified, it is prepended to negative
+    numbers to indicate their negativity. (Arguably, allowing negative ordinals is
+    a violation of the mathematical notion of ordinality, but practically, it's
+    sometimes useful.)
+    """
+    assert isinstance(number, int)
+
+    ret = num2words(number if (number >= 0) else -number, to='ordinal').strip()
+    if number < 0:
+        ret = f"{negative_indicator.strip()} {ret}"
+    if capitalize_first:
+        ret = ret[0].upper() + ret[1:]
+
+    return ret
+
+
+def choose_texts() -> typing.List[str]:
+    """Actually choose the source texts.
+    """
+    log_it("Choosing training texts ...", 2)
+    if not sc.oldmethod:
+        log_it("  ... preparing textual similarity cache ...", 1)
+        with sc.open_cache() as similarity_cache:
+            log_it("    ... cache prepared!", 2)
+            sample_texts = sc.get_source_texts(similarity_cache)
+    else:
+        sample_texts = sc.get_source_texts(None)
+    log_it(" ... selected %d texts" % len(sample_texts), 2)
+    return sample_texts
+
+
+def get_separators(num_separators: int) -> typing.List[str]:
+    """Get a list of textual separators to be used between individual poems in a
+    sequence, such as Roman or Arabic numerals, or perhaps longer textual
+    descriptions like "stanza XII" or "section 14".
+    """
+    if num_separators == 1:
+        return list()
+
+    text_label = random.choice(['Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza',
+                                'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza',
+                                'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza',
+                                'Verse', 'Verse', 'Verse', 'Part', 'Chapter'])  # FIXME! expand choices!
+    if random.random() <= 0.15:             # Roman numerals.
+        return [f"{int_to_roman(i)}" for i in range(1, 1 + num_separators)]
+    if random.random() <= 0.05:             # Roman numerals with text labels.
+        return [f"{text_label} {int_to_roman(i)}" for i in range(1, 1 + num_separators)]
+    if random.random() <= 0.08:             # ordinal description with text label
+        return [f"{ordinal_description(i, True)} {text_label}" for i in range(1, 1 + num_separators)]
+    if random.random() <= 0.02:             # Ordinal description with text label and article.
+        return [f"{text_label} the {ordinal_description(i, True)}" for i in range(1, 1 + num_separators)]
+    if random.random() <= 0.08:             # blank: no separators
+        return ['' for _ in range(num_separators)]
+    return ['%d' % i for i in range(1, 1 + num_separators)]
+
+
+def concretize_form(form_name: str,
+                    form_desc: dict) -> dict:
+    """Given FORM_DESC, a formalized description of a poetic form called FORM_NAME,
+    make specific choices about how the form should be instantiated.
+
+    Returns a dict that includes all the information from the FORM_DESC, plus
+    additional information recording the choices that the function makes.
+    """
+    ret = dict(collections.ChainMap(form_desc, poem_defaults))
+    try:
+        ret['stanza length'] = random.choice(ret['stanza length'])
+    except (TypeError,):
+        return dict(ret)  # If we've already chosen an integer from the list, assume the form is already concretized.
+    try:
+        ret['syllables in foot'] = random.choice(ret['syllables in foot'])
+    except (TypeError,):
+        return dict(ret)
+    try:
+        ret['num stanzas'] = random.choice(range(ret['min stanzas'], 1 + ret['max stanzas']))
+    except (TypeError,):
+        return dict(ret)
+
+    # OK, now work out the line-by-line plan for syllabification for the entire poem.
+    assert (ret['stanza length'] % len(ret['meter pattern']) == 0), "ERROR! length of specified meter pattern is not a factor of stanza length!"
+    syllabic_pattern = [n * ret['syllables in foot'] for n in ret['meter pattern']] * (ret['stanza length'] // len(ret['meter pattern']))
+    ret['poem form'] = [syllabic_pattern] * ret['num stanzas']
+
+    return ret
+
+
+def alternating_sequence(min: int,
+                         max: int) -> typing.Sequence[int]:
+    """Takes the sequence of integers
+        [ MIN, MIN + 1, MIN + 2 ... MAX - 2, MAX - 1, MAX ]
+
+    and reorders it to
+        [ MIN, MAX, MIN + 1, MAX - 1, MIN + 2, MAX - 2, ... ]
+
+    Note that MAX is the actual highest member in the range, not the integer past
+    the highest member. This is not a half-open interval.
+    """
+    working, ret, first = list(range(min, max + 1)), list(), True
+    while working:
+        ret.append(working.pop(0 if (first) else -1))
+        first = not first
+    return ret
+
+
+@functools.lru_cache(maxsize=1024)
+def bin_fit(options: typing.Iterable[typing.Union[int, float]],
+            goal: typing.Union[int, float]) -> typing.Union[typing.List[typing.Union[int, float]], None]:
+    """Given OPTIONS, a list of numeric values, tries to find a combination of values
+    that add up to GOAL. If it finds such a list, returns it. Otherwise, returns
+    None.
+
+    Returns the first solution found, which means in practice that it prefers to
+    find a list containing a few large numbers rather than many small ones. This
+    particular choice was made specifically because it's best to compose a poem from
+    fewer comparatively long sentences than to compose a poem from many very short
+    ones.
+
+    Calls itself recursively, but this is not likely to be a problem unless we start
+    dealing with much longer lists than tests have so far managed to generate. This
+    function is mostly (only?) called while trying to decide whether the list of the
+    numbers of syllables in the cache of unused lines can be used to fill up the
+    remaining syllables needed in a particular poem, and so far this list has not
+    grown large enough to make recursion in this function a problem.
+    """
+    options = list(options)
+    if not options:
+        if goal == 0:
+            return options
+        else:
+            return None
+
+    if sum(options) == goal:
+        return options
+
+    else:
+        current_opts = list(sorted([i for i in options if i <= goal], reverse=True))
+        for current in current_opts:
+            if current == goal:
+                return [current]
+            else:
+                next_opts = current_opts[:]
+                next_opts.remove(current)
+                smaller_bin = bin_fit(tuple(next_opts), (goal - current))
+                if smaller_bin:
+                    return [current] + smaller_bin
+
+
+def strip_invalid_chars(the_poem: str) -> str:
+    """Some characters appear in the training texts but are characters that, I am
+    declaring by fiat, should not make it into the final generated poems at all.
+    The underscore is a good example of characters in this class. This function
+    takes an entire poem as input (THE_POEM) and returns a poem entirely
+    stripped of all such characters.
+    """
+    log_it("INFO: stripping invalid characters from the poem", 2)
+    invalids = ['_', '*']
+    return ''.join([s for s in the_poem if not s in invalids])
+
+
+@functools.lru_cache(maxsize=8192)
+def strip_diacritics(the_input: str) -> str:
+    """Strip diacritical marks and convert to ASCII text by decomposing the Unicode
+    string passed in, then removing non-spacing marks.
+    """
+    return ''.join(the_character for the_character in unicodedata.normalize('NFKD', the_input) if unicodedata.category(the_character) != 'Mn')
+
+
+@functools.lru_cache(maxsize=2048)
+def normalize_text(the_text: str,
+                   lowercase: bool = False) -> str:
+    """Get the "comparison" or "normalized" form of a piece of text. This strips off all
+    unicode accents and, if LOWERCASE is True, reduces the text to lowercase.
+    """
+    if lowercase:
+        return strip_diacritics(the_text).lower()
+    else:
+        return strip_diacritics(the_text)
+
+
+def supplemental_syllable_count(word: str) -> int:
+    """Get the manual count of syllables for words not in CMUDict. If the syllables in
+    this particular word have never before been counted, then we defer to
+    manually_count_syllables(), above, to do so, then cache the resulting
+    calculation as a provisional, to-be-validated-by-a-human number, using it for
+    now but keeping it on the provisional list (that's
+    caches.more_syllable_data['computed']). When validated by a human, it moves to
+    caches.more_syllable_data['validated']. Both are accessible in a ChainMap, so
+    either places is fine, though of course reading the ChainMap gives 'validated'
+    values before 'computed' values if there is a conflict.
+
+    If the number of syllables in this word HAS been computed before, then return
+    that number, whether it's ('just') 'computed' or it's 'validated.'
+
+    Syllable counts can be moved from 'computed" to 'validated' using the function
+    cache.validate_syllables(), which can be called by running caches.py with the
+    appropriate switch. See its documentation for details.
+    """
+    w = normalize_text(word, True)
+    if w in more_syllable_data['all']:
+        return more_syllable_data['all'][w]
+    else:
+        more_syllable_data['computed'][w] = manually_count_syllables(w)
+        return more_syllable_data['all'][w]
+
+
+@functools.lru_cache(maxsize=4096)
+def syllables_in_word(word: str) -> int:
     """Do a reasonably good job of determining the number of syllables in WORD, a word
     in English. Uses the CMU corpus if it contains the word, or a best-guess
     approach otherwise. Based on https://stackoverflow.com/a/4103234.
     """
-    w = ''.join([c for c in word if c.isalpha()])
+    assert isinstance(word, str)
+    w = normalize_text(''.join([c for c in word if c.isalpha()]), True)
     try:
-        return sum([len(list(y for y in x if y[-1].isdigit())) for x in syllable_dict[w.lower()]])
-    except KeyError as err:
-        log_it("Word %s is apparently not in CMUDict: %s" % (shlex.quote(word), err), 5)
-        return manually_count_syllables(w)
+        return len([ph for ph in phoneme_dict[w] if ph.strip(string.ascii_letters)])
+    except (KeyError,):
+        return supplemental_syllable_count(w)
 
 
-def is_prime(n):
-    """Return True if N is prime, false otherwise. "Prime" is here defined specifically
-    as "has fewer than three factors," which is not quite the same as mathematical
-    ... um, primery. Primeness. Anyway, this is intended to be inclusive about edge
-    cases that "is it prime?" should often include (at least for the purposes of
-    this particular project) rather than be an exact mathematically correct test.
+@functools.lru_cache(maxsize=1024)
+def syllables_in_sentence(sentence: str,
+                          genny: typing.Type[tg.TextGenerator]) -> int:
+    """Get the total number of syllables in a sentence. Requires a trained GENNY to
+    split the sentence into tokens.
     """
-    assert (int(n) == n and n >= 1), "ERROR: is_prime() called on %s, which is not a positive integer" % n
-    return (len(factors(n)) < 3)
-
-
-def lines_without_stanza_breaks(the_poem):
-    """Returns a *list* of lines from THE_POEM, ignoring any blank lines."""
-    return [l for l in the_poem.split('\n') if len(l.strip()) > 0]
-
-
-def total_lines(the_poem):
-    """Returns the total number of non-empty lines in the poem."""
-    ret = len(lines_without_stanza_breaks(the_poem))
-    log_it("    current total lines in poem: %d" % ret, 5)
+    ret = 0
+    for token in genny._token_list(sentence, character_tokens=False):
+        ret += syllables_in_word(token)
     return ret
 
 
-def remove_single_lines(the_poem, combination_probability=0.85):
-    """Takes the poem passed as THE_POEM and goes through it, (randomly) eliminating
-    single-line stanzas. Returns the modified poem.
-    """
-    log_it("Removing single lines from the poem with probability %f %%" % (100 * combination_probability), 3)
+def appropriate_quote(quote_list: typing.Iterable[str],
+                      quote_level: int,
+                      standard_english_quotes: bool = False) -> str:
+    """Returns the appropriate quotation mark from QUOTE_LIST, which is a list of
+    (opening or closing) quotation marks. The quotation mark is chosen to be the
+    correct mark to open or close a quote at QUOTE_LEVEL levels of nesting. If
+    STANDARD_ENGLISH_QUOTES is False (the default), then American-style rules for
+    quotes are used (double, then single, then double, then single, then double,
+    then single ...); otherwise, Standard English rules (single, double, single ...)
+    are used.
 
-    # First, produce a list of stanzas, each of which is a list of lines
-    stanzas = [[l for l in s.split('\n') if l.strip()] for s in the_poem.split('\n\n')]
-    i = 0
-    while (i + 1) < len(stanzas):
-        if len(stanzas[i]) < 3:                 # If the length of this stanza is less than three ...
-            try:                                # Combine it with the next stanza. Probably.
-                if random.random() <= combination_probability:
-                    next_stanza = stanzas.pop(i+1)
-                    stanzas[i] += next_stanza
-                else: i += 1
-            except IndexError:                  # If there is no next stanza ...
-                if len(stanzas) > 1:            # ... add this stanza to the end of the previous stanza.
-                    stanzas[-1] += stanzas.pop()
+    This function makes a number of assumptions about the structure of QUOTE_LIST:
+        * it must contain at least two strings.
+        * the first string must be a single quote.
+        * the second string must be a double quote.
+        * any other strings in the list are ignored and not used at all by this
+          function, though they may be useful to other bits of code in this
+          project.
+
+    Here's a quick summary of the first few levels of nesting, for reference, and
+    assuming that the lists passed are the global constants open_quotes and
+    close_quotes:
+
+              Standard English            American English
+    level   opening     closing         opening     closing
+    -----   -------     -------         -------     -------
+      1       ‘            ’               “           ”
+      2       “            ”               ‘           ’
+      3       ‘            ’               “           ”
+      4       “            ”               ‘           ’
+      5       ‘            ’               “           ”
+                                 etc.
+    """
+    return quote_list[((0 if standard_english_quotes else 1) + quote_level - 1) % 2]
+
+
+def normalize_quotes(the_poem: str,
+                     standard_english_quotes: bool = False) -> str:
+    """Takes THE_POEM, a string representing an entire poem, and makes sure that
+    quotation marks are used "correctly": not only are there the same number of
+    opening and closing quotation marks, but they are properly nested, with single
+    and double quotes alternating properly, and opening quotes always preceding
+    closing quotes in an appropriate fashion.
+
+    As with much of the other quote-handling code in this project, assumes that
+    quotation marks are single characters.
+
+    Returns a string, which is the entire modified poem.
+
+    #FIXME: currently, STANDARD_ENGLISH_QUOTES is *never* True. Should it be?
+    """
+    ret = ""
+    quote_depth = 0
+    for i, c in enumerate(the_poem):
+        if c in open_quotes:
+            if i < (len(the_poem)-1):       # Special-case 'tis, 'twas, 'gainst, etc.
+                context = the_poem[i+1:]
+                for which_exception in words_with_initial_apostrophes:
+                    if context.startswith(which_exception) and context[len(which_exception)].isspace():
+                        ret += close_quotes[0]
+                        continue
+            quote_depth += 1
+            ret += appropriate_quote(open_quotes, quote_depth, standard_english_quotes=standard_english_quotes)
+            continue
+        if c in close_quotes:
+            if quote_depth < 1:     # is there no current quote to close? move along, dropping this quotation mark
+                continue
+            if i == 0:              # don't open the poem with a closing quote mark. Just move on.
+                continue
+            if i < (len(the_poem) - 1): # If we've got at least one more character in the poem, make sure this closing quote isn't actually an apostrophe.
+                if th._is_alphanumeric_char(the_poem[i-1]) and th._is_alphanumeric_char(the_poem[i+1]):
+                    continue
+            ret += appropriate_quote(close_quotes, quote_depth, standard_english_quotes=standard_english_quotes)
+            quote_depth -= 1
+            continue
         else:
-            i += 1
-    return '\n\n'.join(['\n'.join(s) for s in stanzas])
-
-
-def regularize_form(the_poem):
-    """Tries to find a form that gives THE_POEM a more or less regular syllables-per-
-    line pattern. This is another series of rough approximations, of course.
-
-    As it tries various strategies, it attempts to build a FORM list, which is
-    simply a list of syllable counts, line by line: so, [10, 10, 10, 10] describes
-    a poem with four ten-syllable lines. These numbers are not firm plans, but
-    rather a series of rolling goals: what the sample list just given actually
-    means, more specifically, is: break off a line with ten or more syllables. Then
-    break off a second line that brings the total syllables in the poem to at least
-    twenty. Then another line that brings the total syllables to at least thirty.
-    Then another line that brings the total syllables to at least forty.
-
-    Once it has made basic choices, it may then go back through and vary the plans,
-    using any of several traditional forms as a rough model for syllabic variation.
-    It keeps track of any syllables over the model it has constructed has relative
-    to the number of syllables in the source text that is going to be reformatted;
-    at the end of the planning process, it randomly removes syllables from anywhere
-    at all in the plan in order to make the number fit. As of this writing (25 July
-    2018), the total syllabic debt should never exceed one, but this may change in
-    the future.
-
-    Once the plans are settled, the poem is made to conform as closely as possible
-    to the expected plan without breaking words between lines.
-
-    Once that is done, this function then re-groups the lines according to any of
-    several strategies, emphasizing (when possible) regular stanza lengths. More
-    work is needed to integrate this more tightly with syllabic normalization.
-
-    Once all of this is done, the function returns the modified poem.
-
-    #FIXME: Currently, the algorithm chops off chunks into lines as soon as it
-    reaches or exceeds its syllabic goal. However, this has two downsides:
-        1. Some zero-syllable-length tokens (e.g., much punctuation) would be
-           better placed at the end of the line than at the beginning of the next
-           line, but this doesn't happen because we stop as soon as we meet our
-           syllabic goal. (We should be looking ahead at the next token.) This is
-           why, for instance, some poems generated recently have commas at the
-           beginnings of lines.
-
-           * This is definitely not the case with all zero-length punctuation,
-             though: the quotation dash should bind right more strongly than it
-             binds left, for instance.
-
-        2. We should be considering how far past the current goal the current token
-           takes us before deciding whether to incorporate it into the current line,
-           rather than just taking whatever's next, no matter how far past the goal
-           this puts us. Currently, if we're (say) one syllable short of our current
-           syllabic goal, we take a token no matter what the token is; it might
-           happen to put us six syllables past our current goal if it's a very long
-           word. It would be smarter to scan the token and count syllables before
-           making the decision, then base than decision on which choice leaves us
-           closer to our current goal at the end of the line.
-    """
-    global post_data
-    log_it("Attempting to regularize poetic form ...", 3)
-    form = None
-    syllable_debt = 0
-    total_syllables = sum([syllable_count(word) for word in genny._token_list(the_poem, character_tokens=False)])
-    syllabic_factors = factors(total_syllables)
-
-    # First_attempt: is any of the factors a plausible line length?
-    single_line_counts = list(set(syllabic_factors) & set(range(7, 17)))
-    if single_line_counts and random.random() < 0.8:
-        length = random.choice(single_line_counts)
-        form = [length] * (total_syllables // length)
-        post_data['syllabic_normalization_strategy'] = 'Regular line length: %d syllables' % length
-        log_it("    ... basic strategy: %d syllables per line" % length, 4)
-    elif random.random() < 0.4:
-        length = total_syllables / the_poem.count('\n')
-        form = [length] * the_poem.count('\n')
-        post_data['syllabic_normalization_strategy'] = 'Fractional regular line length, based on average: %.4g syllables' % length
-        log_it("    ... basic strategy: %f syllables per line" % length, 4)
-    elif random.random() < 0.7:
-        while not form:
-            syllable_debt += 1      # There's a good chance we've already tried, and failed, with zero.
-            syllabic_factors = factors(syllable_debt + total_syllables)
-            single_line_counts = sorted(list(set(syllabic_factors) & set(range(7, 17))))
-            if single_line_counts:
-                length = random.choice(single_line_counts)
-                form = [length] * ((total_syllables + syllable_debt) // length)
-                post_data['syllabic_normalization_strategy'] = 'Regular line length: %d syllables, with syllabic debt of %d' % (length, syllable_debt)
-        log_it("    ... basic strategy: %d syllables per line, with debt of %d syllables" % (length, syllable_debt), 4)
-
-    # First, vary the form planned, as appropriate. Once again, much more work needed (or at least possible) here.
-    log_it("INFO: Deciding whether to apply transformations to basic pattern ...", 3)
-    if form:
-        count = 0
-        if (len(form) % 9 == 0) and (min(form) >= 6) and (random.random() < 0.4):
-            log_it("    choosing richatameter as basic modification model", 4)
-            post_data['stanza length'] = 9          # Force regular-number-of-lines stanzas as form.
-            post_data['syllabic_normalization_strategy'] += " (richtameter-like)"
-            while count < len(form):
-                form[count]   -= (32/9)
-                form[count+1] -= (14/9)
-                form[count+2] += (4/9)
-                form[count+3] += (22/9)
-                form[count+4] += (40/9)
-                form[count+5] += (22/9)
-                form[count+6] += (4/9)
-                form[count+7] -= (14/9)
-                form[count+8] -= (32/9)
-                count += 9
-        elif (len(form) % 6 == 0) and (random.random() < 0.5):
-            log_it("    choosing Burns stanza as basic modification model", 4)
-            if random.random() < 0.8:
-                post_data['stanza length'] = 6          # Force regular-number-of-lines stanzas as form.
-            post_data['syllabic_normalization_strategy'] += " (6-line Burns stanza-like)"
-            while count < len(form):
-                form[count]   += (4/3)
-                form[count+1] += (4/3)
-                form[count+2] += (4/3)
-                form[count+3] -= (8/3)
-                form[count+4] += (4/3)
-                form[count+5] -= (8/3)
-                count += 6
-        elif (len(form) % 5 == 0) and (random.random() < 0.5):
-            log_it('    choosing five-line "ballad" as basic modification model', 4)
-            if random.random() < 0.7:
-                post_data['stanza length'] = 5          # Force regular-number-of-lines stanzas as form.
-            post_data['syllabic_normalization_strategy'] += ' (5-line alternating "ballad" with initial debt of %d)' % syllable_debt
-            while count < len(form):
-                sign = 1 if syllable_debt <= 0 else -1
-                form[count]   += (1 * sign)
-                form[count+1] -= (1 * sign)
-                form[count+2] += (1 * sign)
-                form[count+3] -= (1 * sign)
-                form[count+4] += (1 * sign)
-                count += 5
-                syllable_debt += sign
-        elif (len(form) % 5 == 0) and (random.random() < 0.25):
-            log_it("    choosing cinquain as basic modification model", 4)
-            if random.random() < 0.7:
-                post_data['stanza length'] = 5          # Force regular-number-of-lines stanzas as form.
-            post_data['syllabic_normalization_strategy'] += " (cinquain-like)"
-            while count < len(form):
-                form[count]   -= 2.4
-                form[count+1] -= 0.4
-                form[count+2] += 1.6
-                form[count+3] += 3.6
-                form[count+4] -= 2.4
-                count += 5
-        elif (len(form) % 4 == 0) and (random.random() < 0.4):
-            log_it('    choosing "ballad" with short last line with as basic modification model', 4)
-            if random.random() < 0.6:
-                post_data['stanza length'] = 4          # Force regular-number-of-lines stanzas as form.
-            post_data['syllabic_normalization_strategy'] += " (4-line ballad-like with short last line)"
-            while count < len(form):
-                form[count] += 1
-                form[count + 2] += 1
-                form[count + 3] -= 2
-                count += 4
-        elif (len(form) % 3 == 0 and (random.random() < 0.333333)):
-            log_it("    choosing haiku as basic modification model", 4)
-            if random.random() < 0.4:
-                post_data['stanza length'] = 3          # Force regular-number-of-lines stanzas as form.
-            post_data['syllabic_normalization_strategy'] += " (3-line haiku-like)"
-            while count < len(form):
-                form[count] -= 1
-                form[count + 1] += 2
-                form[count + 2] -= 1
-                count += 3
-        elif (len(form) % 3 == 0 and (random.random() < 0.333333)):
-            log_it("    choosing short-middle-line terza rima as basic modification model", 4)
-            post_data['stanza length'] = 3          # Force regular-number-of-lines stanzas as form.
-            post_data['syllabic_normalization_strategy'] += " (3-line terza rima-like with short middle line)"
-            while count < len(form):
-                form[count] += 1
-                form[count + 1] -= 2
-                form[count + 2] += 1
-                count += 3
-        elif (len(form) % 2 == 0) and (random.random() < 0.6):
-            log_it("    choosing two-line ballad-like stanza as basic modification model", 4)
-            if random.random() < 0.3:
-                post_data['stanza length'] = 2          # Force regular-number-of-lines stanzas as form.
-            post_data['syllabic_normalization_strategy'] += " (2-line ballad-like)"
-            while count < len(form):
-                form[count] += 1
-                form[count+1] -= 1
-                count += 2
-
-        # Next, pay off any syllabic debt.
-        if syllable_debt:
-            log_it("... paying off syllabic debt", 3)
-            for i in random.sample(range(len(form)), syllable_debt):    # Choose random lines from the poem
-                log_it("    ... removing one syllable from line %d" % i, 5)
-                form[i] -= 1                                            # ... they can pay off the debt.
-        post_data['form_plan'] = '[' + ', '.join('%.5g' % i for i in form) + ']'
-
-        # OK, now make the poem conform (approximately) to the form we planned.
-        log_it("INFO: re-breaking poetic lines ...", 4)
-        tokenized_poem = genny._token_list(the_poem, character_tokens=False)
-        working_copy = ''.join(list(the_poem))
-        lines, total_syllables = [][:], 0
-        current_line = ''
-        current_goal = form.pop(0)
-        while tokenized_poem:
-            current_token = tokenized_poem.pop(0)
-            try:
-                next_token = tokenized_poem[0]              # Look, but don't pop it off the stack
-                current_token_with_context = working_copy[:working_copy.find(next_token)]
-            except IndexError:                              # At end of poem? "token with context" *is* "token", then.
-                current_token_with_context = working_copy[:]
-                next_token = ""
-            original_len = len(current_token_with_context)      # We're about to modify current_token_with_context, but we'll need to operate on working_copy based on original length
-            if current_token_with_context.count('\n'):
-                current_token_with_context = th.multi_replace(current_token_with_context, [['\n', ' '], ['  ', ' ']])
-            working_copy = working_copy[original_len:]
-            current_line += current_token_with_context
-            total_syllables += syllable_count(current_token)
-            if total_syllables >= current_goal:         # We've (probably) hit a line break. Reset the things that need to be reset.
-                # If we're out of poem, or we're at/past our syllabic target and the next token is not zero-length, finalize the line and reset.
-                if (not tokenized_poem) or (syllable_count(next_token) != 0):
-                    lines += [current_line + '\n' if not current_line.endswith('\n') else ""]
-                    current_line = ''
-                    try:
-                        current_goal += form.pop(0)
-                    except IndexError:                  # No more lines left? Just run to end of poem.
-                        current_goal += sum([syllable_count(word) for word in tokenized_poem])
-        if tokenized_poem:
-            raise RuntimeError("There is leftover material that has not been put into the new poem!")
-        the_poem = ''.join(lines)
-
-    # OK, now that we've rearranged words from one line to another, we modify the overall stanza form of the poem.
-    textual_lines = lines_without_stanza_breaks(the_poem)
-    post_data['normalization_strategy'] = None
-    if post_data['stanza length'] or ((not is_prime(len(textual_lines))) and (random.random() < 0.8)):
-        if not post_data['stanza length']:
-            post_data['normalization_strategy'] = 'regular stanza length'
-            possible_stanza_lengths = factors(len(textual_lines))
-            if len([x for x in possible_stanza_lengths if x >= 3]):     # If possible, prefer stanzas at least as long as Dante's in the Divine Comedy.
-                possible_stanza_lengths = [x for x in possible_stanza_lengths if x >= 3]
-            if len([x for x in possible_stanza_lengths if x <= 16]):    # If possible, choose a stanza length no longer than Meredith's extended sonnets in /Modern Love/.
-                possible_stanza_lengths = [x for x in possible_stanza_lengths if x <= 16]
-            post_data['stanza length'] = random.choice(possible_stanza_lengths)
-            if post_data['stanza length'] == len(textual_lines):
-                pass
-            if post_data['stanza length'] == 1:
-                post_data['stanza length'] = len(textual_lines)      # 1 long stanza, not many one-line stanzas
-        the_poem = ""
-        for stanza in range(0, len(textual_lines) // post_data['stanza length']):  # Iterate over the appropriate # of stanzas
-            for line in range(0, post_data['stanza length']):
-                the_poem += "%s\n" % textual_lines.pop(0)
-            the_poem += '\n'  # Add stanza break
-    elif (not the_poem.count('\n\n')) and (random.random()) < 0.85:
-        post_data['normalization_strategy'] = 're-introduce random stanza breaks'
-        poem_lines = the_poem.split('\n')
-        for i in range(0, 1 + random.randint(1, len(textual_lines) // 3)):
-            poem_lines[random.randint(0, len(poem_lines) - 1)] += '\n'
-        the_poem = '\n'.join(poem_lines)
-    elif random.random() < 0.8:
-        post_data['normalization_strategy'] = 'remove single lines (strict)'
-        the_poem = remove_single_lines(the_poem, combination_probability=1)
-#    if (post_data['normalization_strategy'] == 're-introduce random stanza breaks') or (post_data['normalization_strategy'] == None and (random.random() < 0.8)):
-#        if post_data['normalization_strategy'] == 're-introduce random stanza breaks':
-#            post_data['normalization_strategy'] += ' + remove single lines (lax)'
-#        else:
-#            post_data['normalization_strategy'] = 'remove single lines (lax)'
-#        the_poem = remove_single_lines(the_poem, combination_probability=0.9)
-    return the_poem
-
-
-def count_previous_untitled_poems():
-    ret = len([x for x in fu.get_files_list(post_archives, None) if 'untitled' in x.lower()])
-    log_it("Counted previous untitled poems: %d" % ret, 4)
+            ret += c
+    # before finishing, close any remaining open quotations.
+    while quote_depth > 0:
+        ret += appropriate_quote(close_quotes, quote_depth)
+        quote_depth -= 1
     return ret
 
 
-def balance_punctuation(the_poem, opening_char, closing_char):
+def balance_punctuation(the_poem: str,
+                        opening_char: str,
+                        closing_char: str) -> str:
     """Makes sure that paired punctuation (smart quotes, parentheses, brackets) in the
     poem are 'balanced.' If not, it attempts to correct it.
+
+    Returns the entire (possibly modified) poem.
     """
     opening, closing = the_poem.count(opening_char), the_poem.count(closing_char)
     if closing_char == '’':     # Sigh. We have to worry about apostrophes that look like closing single quotes.
@@ -635,101 +860,59 @@ def balance_punctuation(the_poem, opening_char, closing_char):
     return the_poem
 
 
-def HTMLify(the_poem):
-    """Return a version of THE_POEM that ends lines with <br /> and wraps stanzas
-    in <p> ... </p>.
+def curlify_quotes(the_poem: str,
+                   straight_quote: str,
+                   opening_quote: str,
+                   closing_quote: str) -> str:
+    """Goes through THE_POEM (a string) and looks for instances of STRAIGHT_QUOTE
+    (a single-character string). When it finds these instances, it substitutes
+    OPENING_QUOTE or CLOSING_QUOTE for them, trying to make good decisions about
+    which of those substitutions is appropriate.
+
+    IMPORTANT CAVEAT: this routine iterates over THE_POEM, making in-place
+    changes at locations determined via an initial scan. This means that
+    OPENING_QUOTE and CLOSING_QUOTE **absolutely must** have the same len() as
+    STRAIGHT_QUOTE, or else weird things will happen. This should not be a
+    problem with standard English quotes under Python 3.X; but it may fail under
+    non-Roman scripts, in odd edge cases, or if the function is used to try to
+    do something other than curlify quotes.
+
+    Returns the entire (possily modified) poem.
+
+    NOT FULLY TESTED, but I'm going to bed.
     """
-    # Add HTML <br /> to end of every line
-    ret = '\n'.join([line.rstrip() + '<br />' for line in the_poem.split('\n')])
-    # Wrap stanzas in <p> ... </p>
-    ret = '\n'.join(['<p>%s</p>' % line for line in ret.split('<br />\n<br />')])
-    # Eliminate extra line breaks at the very beginning of paragraphs
-    ret = th.multi_replace(ret, [['<p><br />\n', '<p>'], ['<p>\n', '<p>'], ['<p>\n', '<p>']])
-    return ret
+    log_it("INFO: curlify_quotes() called to differentiate %s (%d) into %s and %s" % (
+    straight_quote, the_poem.count(straight_quote), opening_quote, closing_quote), 2)
+    assert len(straight_quote) == 1, "Quote characters passed to curlify_quotes() must be one-character strings"
+    assert len(opening_quote) == 1, "Quote characters passed to curlify_quotes() must be one-character strings"
+    assert len(closing_quote) == 1, "Quote characters passed to curlify_quotes() must be one-character strings"
+    index = 0
+    while index < len(the_poem):
+        index = the_poem.find(straight_quote, index)
+        if index == -1:
+            break  # We're done.
+        if index == 0:  # Is it the first character of the poem?
+            the_poem = opening_quote + the_poem[1:]
+        elif index == len(the_poem):  # Is it the last character of the poem?
+            the_poem = the_poem[:-1] + closing_quote
+        elif the_poem[index - 1].isspace() and the_poem[
+            index + 1].isspace():  # Whitespace on both sides? Replace quote with space.
+            the_poem = the_poem[:index] + ' ' + the_poem[1 + index:]
+        elif not the_poem[index - 1].isspace():  # Non-whitespace immediately before quote? It's a closing quote.
+            the_poem = the_poem[:index] + closing_quote + the_poem[index + 1:]
+        elif not the_poem[index + 1].isspace():  # Non-whitespace just after quote? It's an opening quote.
+            the_poem = the_poem[:index] + opening_quote + the_poem[index + 1:]
+        else:  # Quote appears in middle of non-whitespace text ...
+            if straight_quote == '"':
+                the_poem = the_poem[:index - 1] + the_poem[index + 1:]  # Just strip it out.
+            elif straight_quote == "'":
+                the_poem = the_poem[:index - 1] + closing_quote + the_poem[index + 1:]  # Make it an apostrophe.
+            else:
+                raise NotImplementedError("We don't know how to deal with this quote: %s " % straight_quote)
+    return the_poem
 
 
-def appropriate_quote(quote_list, quote_level, standard_english_quotes=False):
-    """Returns the appropriate quotation mark from QUOTE_LIST, which is a list of
-    (opening or closing) quotation marks. The quotation mark is chosen to be the
-    correct mark to open or close a quote at QUOTE_LEVEL levels of nesting. If
-    STANDARD_ENGLISH_QUOTES is False (the default), then American-style rules for
-    quotes are used (double, then single, then double, then single, then double,
-    then single ...); otherwise, Standard English rules (single, double, single ...)
-    are used.
-
-    This function makes a number of assumptions about the structure of QUOTE_LIST:
-        * it must contain at least two strings.
-        * the first string must be a single quote.
-        * the second string must be a double quote.
-        * any other strings in the list are ignored and not used at all by this
-          function, though they may be useful to other bits of code in this
-          project.
-
-    Here's a quick summary of the first few levels of nesting, for reference, and
-    assuming that the lists passed are the global constants open_quotes and
-    close_quotes:
-
-              Standard English            American English
-    level   opening     closing         opening     closing
-    -----   -------     -------         -------     -------
-      1       ‘            ’               “           ”
-      2       “            ”               ‘           ’
-      3       ‘            ’               “           ”
-      4       “            ”               ‘           ’
-      5       ‘            ’               “           ”
-                                 etc.
-    """
-    return quote_list[((0 if standard_english_quotes else 1) + quote_level - 1) % 2]
-
-
-def normalize_quotes(the_poem, standard_english_quotes=False):
-    """Takes THE_POEM, a string representing an entire poem, and makes sure that
-    quotation marks are used "correctly": not only are there the same number of
-    opening and closing quotation marks, but they are properly nested, with single
-    and double quotes alternating properly, and opening quotes always preceding
-    closing quotes in an appropriate fashion.
-
-    As with much of the other quote-handling code in this project, assumes that
-    quotation marks are single characters.
-
-    Returns a string, which is the entire modified poem.
-
-    #FIXME: currently, STANDARD_ENGLISH_QUOTES is *never* True. Should it be?
-    """
-    ret = ""
-    quote_depth = 0
-    for i, c in enumerate(the_poem):
-        if c in open_quotes:
-            if i < (len(the_poem)-1):       # Special-case 'tis, 'twas, 'gainst, etc.
-                context = the_poem[i+1:]
-                for which_exception in words_with_initial_apostrophes:
-                    if context.startswith(which_exception) and context[len(which_exception)].isspace():
-                        ret += close_quotes[0]
-                        continue
-            quote_depth += 1
-            ret += appropriate_quote(open_quotes, quote_depth, standard_english_quotes=standard_english_quotes)
-            continue
-        if c in close_quotes:
-            if quote_depth < 1:     # is there no current quote to close? move along, dropping this quotation mark
-                continue
-            if i == 0:              # don't open the poem with a closing quote mark. Just move on.
-                continue
-            if i < (len(the_poem) - 1): # If we've got at least one more character in the poem, make sure this closing quote isn't actually an apostrophe.
-                if th._is_alphanumeric_char(the_poem[i-1]) and th._is_alphanumeric_char(the_poem[i+1]):
-                    continue
-            ret += appropriate_quote(close_quotes, quote_depth, standard_english_quotes=standard_english_quotes)
-            quote_depth -= 1
-            continue
-        else:
-            ret += c
-    # before finishing, close any remaining open quotations.
-    while quote_depth > 0:
-        ret += appropriate_quote(close_quotes, quote_depth)
-        quote_depth -= 1
-    return ret
-
-
-def fix_punctuation(the_poem):
+def fix_punctuation(the_poem: str) -> str:
     """Cleans up the punctuation in the poem so that it appears to be more
     'correct.' Since characters are generated randomly based on a frequency
     analysis of which characters are likely to follow the last three to ten
@@ -756,173 +939,621 @@ def fix_punctuation(the_poem):
     the_poem = balance_punctuation(the_poem,  '[', ']')
     return balance_punctuation(the_poem,  '{', '}')
 
-def get_title(the_poem):
+
+@functools.lru_cache(maxsize=4096)
+def is_known_word(word: str) -> bool:
+    """Returns True if WORD is known to be a word, based on lists of known words, and
+    False otherwise.
+    """
+    return normalize_text(word, True) in phoneme_dict  # FIXME! Check other syllable dictionaries, maybe?
+
+
+def is_rejectable(sentence: str,
+                  genny: pg.PoemGenerator) -> bool:
+    """Checks to see if the sentence SENTENCE needs to be rejected, based on whatever
+    criteria are necessary to ensure pleasing MTW poems. Requires that GENNY, a
+    fully-trained TextGenerator, be passed in, because it uses GENNY to do word-
+    splitting.
+    """
+    tokenized = genny._tokenize_string(sentence)
+
+    # First, check to see if we have multiple uppercase-only words.
+    if len([w for w in tokenized if w.isupper()]) > 2:
+        return True
+
+    # Next, reject sentences with any numeric-only words.
+    if len([w for w in tokenized if w.isnumeric()]) > 0:
+        return True
+
+    # Next, check to see if the text generator produced any words that we use as the basis on their own for rejecting sentences.
+    sent = sentence.strip().lower()
+    for w in prohibs:
+        if w.lower().strip() in sent:
+            return True
+
+    # Have a high probability of rejecting very short sentences.
+    if len([w for w in tokenized if syllables_in_word(w)]) < 1:
+        return True
+
+    if len([w for w in tokenized if syllables_in_word(w)]) == 1:
+        if random.random() <= (2 / 3):
+            return True
+
+    if len([w for w in tokenized if syllables_in_word(w)]) == 2:
+        if random.random() <= 0.5:
+            return True
+
+    if len([w for w in tokenized if syllables_in_word(w)]) == 3:
+        if random.random() <= (1 / 3):
+            return True
+
+    # Reject the sentence if it does not contain any purely alphabetic words.
+    if not [t for t in tokenized if t.isalpha()]:
+        return True
+
+    # Check to see if the first alphabetic token is longer than one letter and if that first word is capitalized.
+    if len([t for t in tokenized if syllables_in_word(t) > 0][
+               0]) > 1:  # If we have more than one syllabic word ...
+        if ''.join([c for c in [t for t in tokenized if syllables_in_word(t) > 0][0] if c.isalpha()]).isupper():
+            return True
+
+    # If the entire sentence is capitalized, reject it.
+    if ''.join([c for c in sentence.strip() if c.isalpha()]).isupper():
+        return True
+
+    # Reject the sentence if the first alphabetic token is not really a word. (Needing to do this is a known problem
+    # with using character tokens.) Note that "alphabetic token" uses looser criteria than the "do we have any purely
+    # alphabetic words" test above. We also reject any sentences whose first word is a single-letter word not on a
+    # (small) list of letters that are also legitimate words that are allowed to begin sentences
+    first_word = [t for t in tokenized if (len([c for c in t if c.isalpha()]) > 0)][0]
+    first_word = ''.join([c for c in first_word.strip() if c.isalpha()])
+    if not is_known_word(first_word) or (len(first_word) == 1) and (first_word.lower() not in ['a', 'i']):
+        return True
+
+    # If we haven't hit any problems, approve (i.e., decline to reject) the sentence.
+    return False
+
+
+def get_poem_sentence(genny: typing.Type[tg.TextGenerator],
+                      maximum_syllable_length: int) -> str:
+    """Use GENNY to get a single sentence that may be integrated into the poem,
+    applying whatever first-stage textual transformations may be necessary at this
+    stage of processing. Keeps trying until (a) the sentence is not longer than
+    MAXIMUM_SYLLABLE_LENGTH, and (b) it is not rejected by is_rejectable(), above.
+    """
+    valid = False
+    while not valid:
+        ret = genny.gen_text(sentences_desired=1, paragraph_break_probability=0)
+        valid = (not is_rejectable(ret, genny)) and (syllables_in_sentence(ret, genny) <= maximum_syllable_length)
+    ret = th.multi_replace(ret, [
+        ['\n', ' '],
+        ['  ', ' '],  # two spaces to one space
+    ])
+    return ret
+
+
+def write_structured(genny: typing.Type[tg.TextGenerator],
+                     possible_syllable_counts: typing.Collection[int]) -> typing.Iterable[typing.Tuple[str, int]]:
+    """Generate the text of a poem. GENNY must be a fully trained text generator; it
+    will be used to generate the text. POSSIBLE_SYLLABLE_COUNTS is a collection of
+    integers representing the syllabic counts that are legal for the desired poem.
+    """
+    assert genny.is_trained()
+    global unused_lines
+    print(f"   ... starting with {len(unused_lines)} sentences in the unused sentences list")
+
+    poem = collections.deque()  # of 2-tuples: ('text of line', integral syllable count)
+    sentences_written = 0
+    done = False
+
+    while not done:
+        # First, see if we can exactly fill the poem by selecting lines that have already been written.
+        # Cast the global UNUSED_LINES to a tuple because it can get long, and access in the middle of a long deque is slow.
+        bag_results = bin_fit(options=tuple([l[1] for l in list(unused_lines)]),
+                              goal=(max(possible_syllable_counts) - sum([line[1] for line in poem])))
+        if bag_results:  # Each of these results is a syllable count we want to find.
+            print(f"   ... grabbing {len(bag_results)} sentences from the unused sentences list")
+            while bag_results:  # Keep going until we've found all the lines we need.
+                unused_lines.rotate()  # Rotate through the deck until we hit a syllable count we need.
+                current_syll = unused_lines[0][1]
+                if current_syll in bag_results:  # If we need this line, pop it off and remove its syllable count from the list of syllable counts we need.
+                    poem.append(unused_lines.popleft())
+                    bag_results.remove(current_syll)
+            done = True
+
+        # If that didn't work, generate a new sentence and deal with it, adding it to the poem if possible.
+        else:
+            sentences_written += 1
+            new_line = get_poem_sentence(genny, max(possible_syllable_counts))
+            new_syllables = syllables_in_sentence(new_line, genny)
+            if (new_syllables + sum([i[1] for i in poem])) > max(possible_syllable_counts):
+                if len(poem) > 0:  # The new line would put us over.
+                    # First: if it JUST SO HAPPENS that dropping a single line will exactly make the new line fit and finish the poem, make it so
+                    previous_syllables = sum([i[1] for i in poem])
+                    syllables_to_lose = new_syllables + previous_syllables - max(possible_syllable_counts)
+                    if syllables_to_lose in [l[1] for l in poem]:
+                        if len([i for i, j in enumerate(poem) if j[1] == syllables_to_lose]) > 0:
+                            while poem[0][1] != syllables_to_lose:
+                                poem.rotate()
+                            unused_lines.append(poem.popleft())
+                            poem.append((new_line, new_syllables))
+                    else:
+                        if (new_syllables <= max(
+                                possible_syllable_counts)):  # Don't bother saving sentences that are too long to possibly work.
+                            unused_lines.append((new_line, new_syllables))
+                        if random.random() >= 0.5:  # There are even odds that we not only reject the new line ...
+                            if random.random() >= 0.5:  # but also remove the previous one, or the first one, if we've already generated at least one sentence.
+                                unused_lines.append(poem.popleft())
+                            else:  # Pop from right or left side, at random
+                                unused_lines.append(poem.popleft())
+            else:
+                poem.append((new_line, new_syllables))
+            if sum([s[1] for s in poem]) in possible_syllable_counts:
+                done = True
+    print(f"     ... generated after writing {sentences_written} viable sentences! (Leaving {len(unused_lines)} sentences on the unused sentences list.)")
+    return poem
+
+
+def opener_for(closer: str) -> str:
+    """Given CLOSER, a string in CLOSING_BRACKETERS, returns the corresponding opening
+    punctuation mark.
+    """
+    assert closer in closing_bracketers
+    return opening_bracketers[closing_bracketers.index(closer)]
+
+
+def closer_for(opener: str) -> str:
+    """Get the punctuation mark that closes the grammatical bracket opened by OPENER.
+    """
+    assert opener in opening_bracketers
+    return closing_bracketers[opening_bracketers.index(opener)]
+
+
+def discretionary_space(previous_token: typing.Optional[str],
+                        current_token: str,
+                        next_token: typing.Optional[str]) -> str:
+    """Given CURRENT_TOKEN, PREVIOUS_TOKEN, and NEXT_TOKEN, returns either a space, if
+    there should be a space between PREVIOUS_TOKEN and CURRENT_TOKEN, or else a
+    zero-length string, if not.
+
+    NEXT_TOKEN is not currently considered, but it may be used in the future.
+    """
+    if previous_token and (previous_token in punct_with_no_space_after):
+        return ''
+    if current_token in punct_with_no_space_before:
+        return ''
+    return ' '
+
+
+def write_poem(genny: typing.Type[tg.TextGenerator],
+               form_name: str,
+               form_description: dict) -> typing.Tuple[typing.Iterable[typing.Tuple[str, int]], str, typing.Dict[str, typing.Any]]:
+    """Write a poem conforming to the description in FORM_DESCRIPTION and which is
+    named by FORM_NAME, using GENNY, a fully trained TextGenerator. Returns the poem
+    as a string containing the HTML to post to the account.
+    """
+    expanded_description = concretize_form(form_name, form_description)
+
+    # Return the information that will be needed to structure a poem later.
+    poem = write_structured(genny, [sum(flatten_list(expanded_description['poem form']))])
+    return (poem, form_name, expanded_description)
+
+
+def structure_poem(poem_lines: typing.Iterable[typing.Tuple[str, int]],
+                   form_name: str,
+                   form_description: dict,
+                   genny: tg.TextGenerator) -> typing.List[str]:
+    """Given a list of POEM_LINES, arrange them into the syllabic pattern described by
+    FORM_DESCRIPTION. Currently makes no attempt to handle any formal aspects of the
+    poem besides syllable count.
+
+    The function requires a GENNY be passed in to use its utility functions.
+    """
+    # First, produce working copies of the data to avoid causing problems with the next poem written.
+    remaining_poem_lines = poem_lines
+    template = flatten_list(form_description['poem form'])      # We'll break this into verses again later, but for now, it's easier to think by line numbers.
+
+    # Now, we try to consume the lines in REMAINING_POEM_LINES by inserting them into TEMPLATE.
+
+    # First, see if we can find sentences of the exact length required for lines at the very beginning and very end
+    # of the poem. (We do only the beginning and end of the poem, and avoid the middle, to avoid fragmenting the
+    # syllabic space and causing problems later.)
+    missed = False      # whether we have yet been unable to find a line
+    line_order = alternating_sequence(0, len(template) - 1)
+    while (not missed) and (remaining_poem_lines) and (line_order):
+        which_line = line_order.pop(0)
+        if isinstance(template[which_line], int):
+            if template[which_line] in { line[1] for line in remaining_poem_lines }:
+                while remaining_poem_lines[0][1] != template[which_line]:
+                    remaining_poem_lines.rotate()
+                template[which_line] = remaining_poem_lines.popleft()[0]
+            else:
+                missed = True
+        else:
+            missed = True           # If we bumped into a non-integral line, we're done trying to fill in lines.
+
+    # OK, we've consumed all of the lines we can that match needed line lengths at the beginning and end of the poem.
+    # We consume the rest of the text by breaking it into tokens and consuming as many as are necessary for each
+    # remaining unwritten line, tracking how many syllables over or under we are, making sure that we keep at least one
+    # word for each remaining line.
+    remaining_poem_lines = list(remaining_poem_lines)
+    random.shuffle(remaining_poem_lines)
+    remaining_tokens = genny._tokenize_string(' '.join([line[0] for line in remaining_poem_lines]))
+    lines_left_to_fill = len([line for line in template if isinstance(line, int)])
+    syllable_debt = 0           # How many syllables over our target we were at the time we ended our last line. Negative numbers mean "syllables under" instead.
+
+    for line_no, line_length in enumerate(template):
+        if isinstance(line_length, str):       # Do nothing: line is already filled in.
+            pass
+        elif isinstance(line_length, int):     # Fill in line with approximately this many syllables
+            new_line , new_line_syllables = '', 0
+            done = False
+            syllable_target = line_length - syllable_debt
+            previous_token = None
+
+            while not done:
+                # On each iteration, by the time we get here, we've already made a decision to consume the next token.
+                # This round eats that token, then decides whether to go through another round afterwards.
+                new_token = remaining_tokens.pop(0)
+                next_token = remaining_tokens[0] if (len(remaining_tokens) > 0) else None
+                new_line += (discretionary_space(previous_token, new_token, next_token) + new_token)
+
+                # Now we decide whether we're done, in part by peeking at the next token.
+                # Some branches below set DONE to False explicitly, even though it always already is False, to help make
+                # the decision-making process more explicitly visible in the code.
+                if len(remaining_tokens) == 0:      # If we're out of material, we're done
+                    done = True
+                    continue
+
+                # Otherwise, figure out if, on the next round, we're going to take the next token.
+                potential_next_line = (new_line + ' ' + remaining_tokens[0])        # We don't need to worry about discretionary spacing here: this line is never displayed and will be recomputed later.
+
+                if ((line_no + 1) >= (len(template))) and (len(remaining_tokens) > 0):
+                    done = False        # If we're on the last line and have remaining tokens, we're not done.
+                elif (syllables_in_word(remaining_tokens[0]) == 0) and (len(remaining_tokens[0].strip()) == 1) and (remaining_tokens[0] in punct_with_no_space_before):
+                    done = False        # If it's a punctuation mark and binds left, we'll take it on the next round.
+                elif len([t for t in remaining_tokens if (syllables_in_word(t) > 0)]) <= lines_left_to_fill:
+                    done = True         # there must be at least one remaining syllabic token for each remaining line that needs to be filled in.
+                elif syllables_in_sentence(new_line.strip(), genny) >= syllable_target:
+                    done = True         # If we've hit or passed our syllable goal, we're done.
+                elif syllables_in_sentence(potential_next_line, genny) <= syllable_target:
+                    done = False
+                else:                   # if that last test failed, the next token will put us over. Decide whether to take it anyway.
+                    # FIXME: do we want to consider other criteria, such as whether the next token is a preposition or conjunction?
+                    # Currently, just look at whether at least half of the next token's syllables belong on this line
+                    if ((syllables_in_sentence(potential_next_line, genny) - syllable_target) / syllables_in_word(remaining_tokens[0])) > 0.5:
+                        done = True
+                previous_token = new_token
+            template[line_no] = new_line.strip()
+            syllable_debt = syllables_in_sentence(new_line, genny) - syllable_target
+            lines_left_to_fill -= 1
+        else:
+            print("Skipping line of type %s!" % type(line_length))
+
+    # Finally: break the lines of the poem back into stanzas, indenting appropriately based on the formal description.,
+    indent_pattern = collections.deque(form_description['indent pattern'])
+    final_poem = list()
+
+    for stanza in form_description['poem form']:
+        this_stanza = list()
+        for line_length in stanza:
+            this_stanza.append(('&nbsp;' * indent_pattern[0]) + template.pop(0).strip())
+            indent_pattern.rotate(-1)
+        final_poem.append(this_stanza)
+
+    return final_poem
+
+
+def count_previous_untitled_poems() -> int:
+    """Get a count of the number of previous poems that have been untitled.
+    """
+    ret = len([x for x in fu.get_files_list(post_archives, None) if 'untitled' in x.lower()])
+    log_it("Counted previous untitled poems: %d" % ret, 4)
+    return ret
+
+
+def get_title(the_poem: str,
+              genny: typing.Type[tg.TextGenerator]) -> str:
     """Get a title for the poem. There are several title-generating algorithms; this
     function picks one at random.
     """
+    assert isinstance(the_poem, str)
     log_it("INFO: getting a title for the poem", 2)
-    if random.random() < (1/15):
-        title = "Untitled Poem # %d" % (1 + count_previous_untitled_poems())
-    elif random.random() < (1/14):
-        title = "Untitled Composition # %d" % (1 + count_previous_untitled_poems())
-    elif random.random() < (1/13):
-        title = "Untitled # %d" % (1 + count_previous_untitled_poems())
-    elif random.random() < (2/12):
-        title = "Untitled (‘%s’)" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[0]).strip()
-    elif random.random() < (4/10):          # First line, in quotes
+
+    if random.random() < (1 / 15):
+        title = f"Untitled Poem # {1 + count_previous_untitled_poems()}"
+    elif random.random() < (1 / 14):
+        title = f"Untitled Composition # {1 + count_previous_untitled_poems()}"
+    elif random.random() < (1 / 13):
+        title = f"Untitled # {1 + count_previous_untitled_poems()}"
+    elif random.random() < (2 / 12):
+        title = f"Untitled (‘{th.strip_leading_and_trailing_punctuation(the_poem.split(NEWLINE)[0]).strip()}’)"
+    elif random.random() < (4 / 10):  # First line, in quotes
         title = th.strip_leading_and_trailing_punctuation(the_poem.strip().split('\n')[0]).strip()
-    elif random.random() < (3/6):           # Pick one of the first three lines
-        title = "‘%s’" % th.strip_leading_and_trailing_punctuation(the_poem.split('\n')[random.randint(1,4)-1]).strip()
-    else:                                   # New 'sentence' from same poem
+    elif random.random() < (3 / 6):  # Pick one of the first three lines
+        title = f"‘{th.strip_leading_and_trailing_punctuation(the_poem.split(NEWLINE)[random.randint(1, 4) - 1]).strip()}’"
+    else:  # New 'sentence' from same poem
         title = th.strip_leading_and_trailing_punctuation(genny.gen_text(sentences_desired=1).split('\n')[0].strip())
-    if len(title) < 5:                              # Try again, recursively.
-        title = get_title(the_poem)
+    if len(title) < 5:  # Try again, recursively.
+        title = get_title(the_poem, genny)
     while len(title) > 70:
         words = title.split()
         title = ' '.join(words[:random.randint(3, min(12, len(words)))])
     title = title.strip()
-    if title.startswith('‘') and not title.endswith('’'):       # The shortening procedure above might have stripped the closing quote
+    if title.startswith('‘') and not title.endswith('’'):  # The shortening procedure above might have stripped the closing quote
         title = title + '’'
     if '(‘' in title and not '’)' in title:
         title = title + '’)'
     title = fix_punctuation(title)
-    log_it("Title is: %s" % title)
+    log_it(f"Title is: {title}")
     return title
 
 
-def strip_invalid_chars(the_poem):
-    """Some characters appear in the training texts but are characters that, I am
-    declaring by fiat, should not make it into the final generated poems at all.
-    The underscore is a good example of characters in this class. This function
-    takes an entire poem as input (THE_POEM) and returns a poem entirely
-    stripped of all such characters.
+manually_check_capitalization=False
+
+
+def final_validation(p: typing.List[typing.Tuple[str, int]]) -> typing.Iterable[typing.Tuple[str, int]]:
+    """Perform any final adjustments to the text of the poem's lines. Currently,
+    this means validating the capitalization of the lines, but other changes may
+    be automagically made at some later date.
     """
-    log_it("INFO: stripping invalid characters from the poem", 2)
-    invalids = ['_', '*']
-    return ''.join([s for s in the_poem if not s in invalids])
+    cap_validator = cc.correct_sentence_capitalization if manually_check_capitalization else lambda line, *args: line
+    ret = collections.deque()
+    for line, syll in p:
+        ret.append((cap_validator(line), syll))
+    return ret
 
-def curlify_quotes(the_poem, straight_quote, opening_quote, closing_quote):
-    """Goes through THE_POEM (a string) and looks for instances of STRAIGHT_QUOTE
-    (a single-character string). When it finds these instances, it substitutes
-    OPENING_QUOTE or CLOSING_QUOTE for them, trying to make good decisions about
-    which of those substitutions is appropriate.
 
-    IMPORTANT CAVEAT: this routine iterates over THE_POEM, making in-place
-    changes at locations determined via an initial scan. This means that
-    OPENING_QUOTE and CLOSING_QUOTE **absolutely must** have the same len() as
-    STRAIGHT_QUOTE, or else weird things will happen. This should not be a
-    problem with standard English quotes under Python 3.X; but it may fail under
-    non-Roman scripts, in odd edge cases, or if the function is used to try to
-    do something other than curlify quotes.
+def polish_punctuation(poem_text: str) -> str:
+    """Given POEM_TEXT, the text of a poem, polish its punctuation use. Currently, this
+    means:
+       * Convert straight quotes to curly quotes, contextually; and
+       * Add and remove brackets as necessary to ensure balanced bracket use.
 
-    NOT FULLY TESTED, but I'm going to bed.
+    Note that this does not make any attempt to preserve the "sense" of the poem,
+    there being no sense to any of the poems generated anyway; it just attempts to
+    make the poem's punctuation use "look correct."
+
+    Returns the (possibly modified) POEM_TEXT.
     """
-    log_it("INFO: curlify_quotes() called to differentiate %s (%d) into %s and %s" % (straight_quote, the_poem.count(straight_quote), opening_quote, closing_quote), 2)
-    assert len(straight_quote) == 1, "Quote characters passed to curlify_quotes() must be one-character strings"
-    assert len(opening_quote) == 1, "Quote characters passed to curlify_quotes() must be one-character strings"
-    assert len(closing_quote) == 1, "Quote characters passed to curlify_quotes() must be one-character strings"
-    index = 0
-    while index < len(the_poem):
-        index = the_poem.find(straight_quote, index)
-        if index == -1:
-            break       # We're done.
-        if index == 0:                                                      # Is it the first character of the poem?
-            the_poem = opening_quote + the_poem[1:]
-        elif index == len(the_poem):                                        # Is it the last character of the poem?
-            the_poem = the_poem[:-1] + closing_quote
-        elif the_poem[index-1].isspace() and the_poem[index+1].isspace():   # Whitespace on both sides? Replace quote with space.
-            the_poem = the_poem[:index] + ' ' + the_poem[1+index:]
-        elif not the_poem[index-1].isspace():                               # Non-whitespace immediately before quote? It's a closing quote.
-            the_poem = the_poem[:index] + closing_quote + the_poem[index+1:]
-        elif not the_poem[index+1].isspace():                               # Non-whitespace just after quote? It's an opening quote.
-            the_poem = the_poem[:index] + opening_quote + the_poem[index+1:]
-        else:                                                               # Quote appears in middle of non-whitespace text ...
-            if straight_quote == '"':
-                the_poem = the_poem[:index-1] + the_poem[index+1:]                  # Just strip it out.
-            elif straight_quote == "'":
-                the_poem = the_poem[:index-1] + closing_quote + the_poem[index+1:]  # Make it an apostrophe.
+
+    def get_last_quote() -> typing.Union[str, None]:
+        """Return the opening quote mark most recently added to the OPEN_BRACKETS
+        stack, or None if there are no quotes in that stack.
+        """
+        nonlocal currently_open_brackets
+        try:
+            return [c for c in reversed(currently_open_brackets) if c in [opening_bracketers[0], opening_bracketers[1]]][0]
+        except IndexError:
+            return None
+
+    ret = ''
+    prev_char = None
+    currently_open_brackets = list()  # A (loose) stack of length-1 strings. Most recently opened bracket is at the end.
+
+    for index, curr_char in enumerate(poem_text):
+        # Walk through the poem, character by character, tracking the previious character (if there is one) and the next
+        # character (if there is one). Any of the following code can change CURR_CHAR to something else (e.g. a
+        # straight to a curly quote). If, at the end of the loop, CURR_CHAR is None (or anything falsey), nothing
+        # further is done with that character; otherwise, CURR_CHAR is added to the poem.
+        try:
+            next_char = poem_text[1 + index]
+        except IndexError:
+            next_char = None
+
+        if curr_char in [English_straight_single_quote, English_straight_double_quote]:
+            # If we get a straight single or double quote, determine if it's an opener or a closer.
+            # Whether it's single or double will be determined in a set of branches further down.
+            if (not prev_char) or ((isinstance(prev_char, str)) and (prev_char.isspace())):
+                # If there's no preceding character, or if the preceding character is whitespace, it's an opening quote.
+                curr_char = opening_bracketers[0]
             else:
-                raise NotImplementedError("We don't know how to deal with this quote: %s " % straight_quote)
-    return the_poem
+                # Otherwise, it's a closing quote.
+                curr_char = closing_bracketers[0]
 
-def do_basic_cleaning(the_poem):
-    """Does first-pass elementary cleanup tasks on THE_POEM. Returns the cleaned
-    version of THE_POEM.
-    """
-    log_it("INFO: about to do basic pre-cleaning of poem", 2)
-    the_poem = th.multi_replace(the_poem, [[' \n', '\n'], ['\n\?', '?'], ['\n!', '!'],
-                                           ['\n"', '\n'], ['\n”', '\n'], ['\n\n\n', '\n\n'],
-                                           ['\n" ', '\n"'], ['^" ', '"']]).rstrip()
-    return the_poem
+        if curr_char in [opening_bracketers[0], opening_bracketers[1]]:
+            last_quote = get_last_quote()
+            curr_char = opening_bracketers[1] if (last_quote == opening_bracketers[0]) else opening_bracketers[0]
+            currently_open_brackets.append(curr_char)
+        elif curr_char in opening_bracketers:
+            currently_open_brackets.append(curr_char)
 
+        elif curr_char in [closing_bracketers[0], closing_bracketers[1]]:
+            last_quote = get_last_quote()
+            if not last_quote:  # If there is no open quote, just drop the close quote we're dealing with.
+                curr_char = None
+            else:  # Otherwise, figure out if it's a single or double quote.
+                curr_char = closer_for(last_quote)
+                # And before we add that close quote in, close any open brackets that need to be closed for us to close that quote.
+                done = False
+                while (not done) and (currently_open_brackets):
+                    current_closer = closer_for(currently_open_brackets.pop())
+                    if current_closer == curr_char:  # If we just popped off what we need, we're done here.
+                        done = True  # We need not manually add it to RET; that'll happen at the end of this ENUMERATE loop.
+                    else:  # Otherwise, manually add whatever we need to to close the bracket
+                        ret += current_closer
+        elif curr_char in closing_bracketers:
+            if opener_for(curr_char) not in currently_open_brackets:
+                curr_char = None  # If the character doesn't close an open bracket, just drop it.
+            else:
+                done = False
+                while (not done) and (currently_open_brackets):
+                    current_closer = closer_for(currently_open_brackets.pop())
+                    if current_closer == curr_char:
+                        done = True
+                    else:
+                        ret += current_closer
 
-def do_final_cleaning(the_poem):
-    log_it("INFO: about to do final cleaning of poem", 2)
-    the_poem = th.multi_replace(the_poem, [[' \n', '\n'],               # Eliminate any spurious end-of-line spaces
-                                           ['\n\n\n', '\n\n'],          # ... and any extra line breaks.
-                                           [r'\n\)', r')'],             # And line breaks right before ending punctuation
-                                           ['\n\?', '?'], ['\n!', '!'],
-                                           ['\n"', '\n'], ['\n”', '\n'], ['\n’', '’'],
-                                           ['“\n', '“'], ['"\n', '"'],  # And line breaks right after beginning punctuation
-                                           ['\n—\n', '—\n'],            # Don't allow an em dash to be the only character on a line.
-                                           ['`', '’']                   # Replace backticks with faux apostrophes
-                                          ])
-    poem_lines = the_poem.split('\n')
-    index = 0
-    while index < (len(poem_lines) - 1):                                # Go through, line by line, making any final changes.
-        line = poem_lines[index]
-        if '  ' in line.strip():                                        # Multiple whitespace in line? Break into multiple lines
-            individual_lines = ['  ' + i + '\n' for i in line.split('  ')]  #FIXME: count how many spaces we're breaking on. Ugh.
-            if len(individual_lines) > 1:
-                poem_lines.pop(index)
-                individual_lines.reverse()          # Go through the sub-lines backwards,
-                for l in individual_lines:
-                    index += 1
-                    poem_lines.insert(index, l)     # ... inserting lines and pushing the line stack up.
+        # FIXME: also deal with sentence-ending punctuation!
         else:
-            index += 1
-    the_poem = '\n'.join(poem_lines)
+            pass
 
-    # OK, now let's check to make sure we don't have a duplicate last stanza.
-    stanzas= the_poem.split('\n\n')
-    if len(stanzas) >= 2:
-        while stanzas[-1].strip().lower() == stanzas[-2].strip().lower():
-            stanzas = stanzas[:-1]
-    return regularize_form(the_poem)
+        # If anything above set CURR_CHAR to None (or anything falsey), just move along. Otherwise, perform final processing.
+        if curr_char:
+            ret += curr_char
+            prev_char = curr_char
+
+    return poem_text  # FIXME!
 
 
-def main():
-    global genny, post_data
+def perform_absolute_final_poem_adjustments(poem_text: str) -> str:
+    """Given the entire text of the poem, make any final adjustments.
 
-    if not sc.oldmethod:
-        with sc.open_cache() as similarity_cache:
-            sample_texts = sc.get_source_texts(similarity_cache)
+    Currently, does nothing.
+    """
+    return polish_punctuation(poem_text)
+
+
+def arrange_sequence(genny: typing.Type[tg.TextGenerator],
+                     all_poems: typing.List[typing.List[str]],
+                     separators: typing.List[str],
+                     subtitle: typing.Optional[str] = None) -> str:
+    """Take a list of poems, ALL_POEMS, and a list of separators between poems, and
+    a subtitle, and assemble them into the actual text of the post that will be
+    shipped off to the online host. This is the beginning of the last chance to
+    intervene in text production before the text is published.
+    """
+    global post_data
+
+    assert (len(all_poems) <= len(separators)) or ((len(all_poems) == 1) and (len(separators) == 0))
+    assert separators is not None
+    for _ in separators:
+        assert isinstance(_, str)
+
+    finalized_poems = [][:]
+    for p in all_poems:
+        finalized_poems.append(structure_poem(poem_lines=final_validation(p[0]), form_name=p[1], form_description=p[2], genny=genny))
+
+    line_break = '<br>\n'
+    ret = f"""<h3>{subtitle}</h3>""" if subtitle else ""
+
+    for num, poem in enumerate(finalized_poems):
+        this_poem = ""
+        for stanza in poem:
+            this_poem += f"\n\n<p>{line_break.join(stanza)}</p>"
+
+        this_poem = perform_absolute_final_poem_adjustments(this_poem)
+        if separators:
+            ret += (f"\n\n<p>{'&nbsp;' * 15}{separators[num] if (separators) else '&nbsp;'}</p>" + this_poem)
+        else:
+            ret += this_poem
+
+    post_data['formatted poems'] = copy.deepcopy(ret)
+    return ret
+
+
+def archive_post_data() -> None:
+    """Archive the poem and its relevant data in the archives/ folder."""
+    global post_data
+
+    potential_archive_dirs = sorted(list(archive_dir.glob('*')))
+    archive_dir_to_use = potential_archive_dirs[-1]
+    if len(list(archive_dir_to_use.glob('*'))) >= max_archives_in_sub_dir:
+        archive_dir_to_use = archive_dir / f"{1 + len(list(archive_dir.glob('*'))):04}"
+        archive_dir_to_use.mkdir()
+
+    post_data['composition ended'] = datetime.datetime.now().isoformat()
+
+    archive_file_path = archive_dir_to_use / f"{datetime.datetime.now().isoformat()} ― {post_data['title']}.json.bz2"
+    with bz2.open(archive_file_path, mode='wt', encoding='utf-8') as archive_file:
+        archive_file.write(json.dumps(post_data, indent=2, ensure_ascii=False, sort_keys=False, default=repr))
+
+    # FIXME! Should we also be saving other data here, e.g. maybe capitalization data?
+
+
+def write_sequence(genny: pg.PoemGenerator,
+                   num_poems: typing.Union[int, None] = 1) -> typing.Tuple[str, str]:
+    """Write and return a sequence of NUM_POEMS poems. GENNY must be a fully-trained
+    TextGenerator (or subclass) instance; it will be used to generate the text of
+    the poems. Returns a tuple: (poem title, poem text).
+
+    If NUM_POEMS is 0, None, or in fact anything Falsey, a random low-ish prime
+    number is chosen as NUM_POEMS.
+    """
+    global post_data
+    assert genny.is_trained()
+
+    if not num_poems:
+        opts = list(reversed(eratosthenes_sieve()))
+        expanded_opts = flatten_list([[j] * (len(opts) + 1 - i) for i, j in enumerate(opts)])
+        num_poems = random.choice(expanded_opts)
+
+    form_name = random.choice(list(poem_forms.keys()))
+    form_description = random.choice(poem_forms[form_name])
+    post_data['form'] = {'name': form_name, 'description': copy.deepcopy(form_description)}
+
+    separators = get_separators(num_poems)
+    if separators:
+        if might_be_an_int(separators[0]):                      # If separators are just numbers, zero-pad the archival copies so they display in order when viewing JSON archives.
+            archival_separator_labels = [f"{int(sep):04}" for sep in separators]
+        else:
+            archival_separator_labels = separators
+
+    all_poems = list()
+    for count in range(num_poems):
+        if separators:
+            print(f"  Now writing {form_name} {separators[count].strip() or (1+count)} (of {num_poems})")
+        else:
+            print(f"  Now writing {form_name}!")
+        is_new_poem = False
+        while not is_new_poem:
+            new_poem = write_poem(genny, form_name, form_description)
+            if new_poem not in all_poems:
+                all_poems.append(new_poem)
+                is_new_poem = True
+            else:
+                print("       ... rejecting poem! It is identical to another already in the sequence.")
+
+    all_poem_text = '\n'.join([i for i in flatten_list([t[0] for t in all_poems]) if isinstance(i, str)])
+    title = get_title(the_poem=all_poem_text, genny=genny)
+    if separators:
+        post_data['raw poems'] = dict(zip(archival_separator_labels, all_poems))
     else:
-        sample_texts = sc.get_source_texts(None)
-    log_it(" ... selected %d texts" % len(sample_texts), 2)
+        post_data['raw poems'] = all_poems
 
-    # Next, set up the basic parameters for the run
+    # Saving an intermediate state, which happens next, is sometimes helpful for debugging, but should eventually be
+    # removed when postprocessing is completely stable.     # FIXME
+    # Currently disabled, needs to be brought over from testing build if used.
+    # globs.create_testing_save(all_poems=all_poems, form_desc=form_description, form_name=form_name, separators=separators, subtitle=subtitle, genny=genny)
+
+    subtitle = f"A {form_name} sequence" if (num_poems > 1) else None
+    post_text = arrange_sequence(genny=genny, all_poems=all_poems,  separators=separators, subtitle=subtitle)
+    post_data['unused lines'] = unused_lines
+
+    print(f"Poem {'sequence' if num_poems > 1 else ''} written, posting ...")
+    return (title, post_text)
+
+
+def main() -> None:
+    """Select source poems, train a generator on them, and generate a poem.
+    """
+    global genny, post_data, unused_lines
+
+    # Set up the basic parameters for the run
+    sample_texts = [ th.remove_prefix(t, "Link to ").strip() for t in choose_texts() ]
     chain_length = round(min(max(random.normalvariate(6, 0.8), 3), 10))
-
-    # And track sources of this particular poem
-    source_texts = [ th.remove_prefix(t, "Link to ").strip() for t in sample_texts ]
-    post_data['tags'] += ['Markov chain length: %d' % chain_length, '%d texts' % len(sample_texts) ]
-
-    poem_length = round(min(max(random.normalvariate(10, 5), 4), 200))          # in SENTENCES. Not lines.
+    post_data['tags'] += [f'Markov chain length: {chain_length}', f'{len(sample_texts)} texts' ]
 
     log_it("INFO: about to set up and train text generator ...")
-    genny = pg.PoemGenerator(name='Libido Mechanica poetry generator', training_texts=sample_texts, markov_length=chain_length)
+    genny = pg.PoemGenerator(name='Libido Mechanica poetry generator', training_texts=sample_texts,
+                             markov_length=chain_length)
     log_it(" ...trained!")
+
+    """
+    poem_length = round(min(max(random.normalvariate(10, 5), 4), 200))          # in SENTENCES. Not lines.
 
     log_it("INFO: about to generate poem ...")
     the_poem = genny.gen_text(sentences_desired=poem_length, paragraph_break_probability=0.2)
+    """
 
-    post_data['title'] = get_title(the_poem)
+    num_poems = 1 if (random.random() > 0.02) else None
+    post_data['title'], the_poem = write_sequence(genny, num_poems=num_poems)
 
     log_it("poem generated; title is: %s" % post_data['title'])
     log_it("lines are: \n\n" + the_poem)
     log_it("tags are: %s" % post_data['tags'])
 
+    """
     log_it("INFO: cleaning poem up ...")
     the_poem = do_basic_cleaning(the_poem)
     the_poem = fix_punctuation(the_poem)
@@ -936,25 +1567,18 @@ def main():
     formatted_poem = th.multi_replace(formatted_poem, [['<p>\n', '\n<p>']])
     # Prevent all spaces from collapsing; get rid of spurious paragraphs
     formatted_poem = th.multi_replace(formatted_poem, [['<p></p>', ''], ['<p>\n</p>', '']])
+    """
     log_it('INFO: Attempting to post the content...')
-    post_data['status_code'], post_data['tumblr_data'] = social_media.tumblr_text_post(libidomechanica_client, ', '.join(post_data['tags']), post_data['title'], formatted_poem)
+    post_data['status_code'], post_data['tumblr_data'] = social_media.tumblr_text_post(libidomechanica_client, ', '.join(post_data['tags']), post_data['title'], the_poem)
     log_it('INFO: the_status is: ' + pprint.pformat(post_data['status_code']), 2)
     log_it('INFO: the_tumblr_data is: ' + pprint.pformat(post_data['tumblr_data']), 3)
 
     log_it("INFO: archiving poem and metadata ...")
     post_data['text'], post_data['time'] = the_poem, datetime.datetime.now().isoformat()
-    post_data['the_poem'], post_data['formatted_text'] = the_poem, formatted_poem
-    post_data['sources'] = sorted(source_texts)
-    archive_name = "%s — %s.json.bz2" % (post_data['time'], post_data['title'])
-    last_folder = sorted([d for d in glob.glob(os.path.join(post_archives, '*')) if os.path.isdir(d)])[-1]
-    if len([f for f in glob.glob(os.path.join(last_folder, "*json.bz2")) if os.path.isfile(f)]) > 999:
-        new_folder = os.path.join(post_archives, "%03d" % (1 + int(os.path.basename(last_folder))))
-        os.mkdir(new_folder)
-        last_folder = new_folder
-        with sc.open_cache() as similarity_cache:              # Every thousand poems, clean out the cache.
-            similarity_cache.clean_cache()
-    with bz2.BZ2File(os.path.join(last_folder, archive_name), mode='wb') as archive_file:
-        archive_file.write(json.dumps(post_data, sort_keys=True, indent=3, ensure_ascii=False).encode())
+    post_data['the_poem'] = the_poem
+    post_data['sources'] = sorted(sample_texts)
+
+    archive_post_data()
     log_it("INFO: We're done")
 
 
