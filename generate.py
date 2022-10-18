@@ -103,10 +103,6 @@ LICENSE.md for more details.
 # Current list of things so annoying that they're likely to get priority in fixing:
 # * Deepening and diversifying the corpus is always a goal.
 # * Something is occasionally truncating poems early.           --FIXED?
-#   * It seems to be connected to the lax reduce-single-lines postprocessing schema.
-#   * Should start to passively diagnose problems like this by moving copies of their JSON archive data to folders
-#     that track instances of those problems.
-#   * comm -1 -2 a.json b.json (or such) should then help look for similarities.
 # * We should syllabify the entire source corpus, keeping a list of which words are manually syllabified, then
 #   check to see if they're syllabified correctly, and keep a second dictionary to use in addition to the CMU
 #   corpus.
@@ -114,25 +110,21 @@ LICENSE.md for more details.
 #   * (approximate) year of composition
 #   * geographical nearness
 #   * various author characteristics
-#     * just picking multiple poems from a single author would be a good move with authors who have a sufficient number of poems in the corpus.
+#     * just picking multiple poems from a single author would be a good move with authors who have a sufficient
+#       number of poems in the corpus.
 #   * all of these would require manual metadata entry. Oh boy, another pickled dictionary or something.
-# * Tokenizing currently drops leading space, which shouldn't happen, actually.
+# * Tokenizing currently drops leading space, which shouldn't happen, actually. -- NO LONGER CONVINCED THIS IS TRUE
 # * We should have CAPITALIZATION NORMALIZATION goin' on. In the output, I mean.
 #   * Also other formal things: patterns of leading space, e.g.
 # * When a poem title needs to be shortened, the current algorithm simply lops off a random number of tokens until the
 #   phrase is short enough. This works sometimes, but also produces titles that, say, end with conjunctions an
 #   unpleasant amount of the time. It would be smarter to generate a parse tree for the relevant sentence,
 #   then grab an appropriate-length branch (or branches) from it.
-#   * Maybe we should shorten the maximum length a bit, too.
 # * There is of course always parameter tweaking. Documentation improvements, too.
 # * We should try harder to avoid producing poems with a prime number of lines.
 #   * Come right down to it, we should also try harder to avoid producing poems with a PRIME-LIKE number of syllables.
 #     (By which I mean: no USEFUL factors in the number. It's surprising how many poems are generated with a total
 #     number of syllables that has no factors that are plausible poetic line lengths.)
-# * Over the long term, we need a better way to store and access the similarity cache. If we double the size of the
-#   corpus from here, we would be well over 100MB in a single bzipped, already-pickle-compressed pickle file. That's
-#   super-unwieldy. Plus, having all of that in memory at once already causes occasional problems at this size. I
-#   need to learn some sort of simple database implementation before the corpus gets much bigger.    --WORKING
 # * The directory structure needs reworking, and this module needs to be split into smaller files.   --WORKING
 #   * This probably implies a utils/ folder for secondary scripts, like check_corpus.py.
 #     * There will almost certainly be others.
@@ -189,7 +181,7 @@ import cython_experiments.similarity_cache.similarity_cache as sc      # Cache o
 
 patrick_logger.verbosity_level = 3
 
-unused_lines = collections.deque()
+manually_check_capitalization = False
 
 base_dir = Path(__file__).parent
 
@@ -200,6 +192,7 @@ archive_dir = base_dir / 'archives'
 max_archives_in_sub_dir = 1000
 
 # Load the supplemental syllabification data.
+# FIXME: this spplemental data is never saved!
 try:
     more_syllable_data = json.loads(syllables_cache.read_text(encoding='utf-8'))
 except (json.JSONDecodeError, IOError):
@@ -212,14 +205,15 @@ more_syllable_data['all'] = collections.ChainMap(more_syllable_data['corrected']
                                                  more_syllable_data['computed'])
 
 
+unused_lines = collections.deque()
+
+
 # This next is a global dictionary holding data to be archived at the end of the run. Modified constantly.
 post_data = {'tags': ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains'],
              'normalization_strategy': None,
              'syllabic_normalization_strategy': None,
              'stanza length': None,
              }
-
-genny = None            # We'll reassign this soon. We want it to be defined in the global namespace early, though.
 
 poem_defaults = {
     'max stanzas': 20,          # FIXME: for now.
@@ -230,17 +224,26 @@ poem_defaults = {
 poem_forms = {
     'ballad':
         [
-            {'stanza length': [4, 4, 4, 4, 4, 4, 4, 4, 6, 8, 8,],           # pick one of these numbers: how long will a stanza be, in lines?
-             'syllables in foot': [2, 2, 2, 2, 2, 2, 2, 3],                 # possible numbers of syllables in a foot
-             'meter pattern': [4, 3],       # METRICAL FEET, not syllables, per line. [4, 3] means a four-foot line is followed by a three-foot line, and this pattern repeats through the stanza.
-             'indent pattern': [0, 4],      # Number of spaces before each line in the poem. Cycles when exhausted. Need not match up with stanza length.
+            {   # pick one of these numbers: how long will a stanza be, in lines?
+                'stanza length': [4, 4, 4, 4, 4, 4, 4, 4, 6, 8, 8,],
+
+                # possible numbers of syllables in a foot:
+                'syllables in foot': [2, 2, 2, 2, 2, 2, 2, 3],
+
+                # METRICAL FEET, not syllables, per line.
+                # [4, 3] means a 4-foot line is followed by a 3-foot line, & this pattern repeats through the stanza.
+                'meter pattern': [4, 3],
+
+                # Number of spaces before each line in the poem.
+                # Cycles when exhausted. Need not match up with stanza length.
+                'indent pattern': [0, 4],
              },
         ],
     'sonnet':
         [
             {'stanza length': [14,],
-             'syllables in foot': [2, 2, 2, 2, 2, 2, 3,],                   # iambic pentameter is most common form
-             'meter pattern': [5,],                                         # FIXME: make tetrameter sonnets also possible!
+             'syllables in foot': [2, 2, 2, 2, 2, 2, 3,],               # iambic pentameter is most common form
+             'meter pattern': [4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, ],
              'max stanzas': 1,
              },
         ],
@@ -256,8 +259,8 @@ poem_forms = {
     'limerick':
         [
             {'stanza length': [5,],
-             'syllables in foot': [3,],                                     # Anapestic trimeter, trimeter, dimeter, dimeter, trimeter.
-             'meter pattern': [3, 3, 2, 2, 3],
+             'syllables in foot': [3,],                                 # Anapestic trimeter, trimeter, dimeter, ..
+             'meter pattern': [3, 3, 2, 2, 3],                          # ...  dimeter, trimeter.
              'max stanzas': 1,
              'indent pattern': [0, 0, 3, 3, 0,],
              },
@@ -273,8 +276,8 @@ poem_forms = {
     'curtal sonnet':
         [
             {'stanza length': [11,],
-             'syllables in foot': [2,],                                     # Iambic pentameter
-             'meter pattern': [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 1],            # Last line is actually a single spondee, but we don't yet have a way to represent meter.
+             'syllables in foot': [2,],                                 # Iambic pentameter
+             'meter pattern': [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 1],        # Last line is actually a single spondee, but we don't yet have a way to represent meter.
              'max stanzas': 1,
              },
         ],
@@ -296,13 +299,13 @@ poem_forms = {
         ],
     'rispetto':
         [
-            {'stanza length': [4,],                                         # version 1: two iambic tetrameter quatrains
+            {'stanza length': [4,],                                     # version 1: 2 iambic tetrameter quatrains
              'syllables in foot': [2,],
              'meter pattern': [4,],
              'min stanzas': 2,
              'max stanzas': 2,
              },
-            {'stanza length': [8,],                                         # version 2: one stanza, eight hendecasyllabic lines
+            {'stanza length': [8,],                                     # version 2: 1 stanza, 8 hendecasyllabic lines
              'syllables in foot': [1,],
              'meter pattern': [11,],
              'max stanzas': 1,
@@ -344,7 +347,7 @@ English_straight_single_quote = "'"
 English_straight_double_quote = '"'
 
 prohibs = [
-    '@',                                                # email addresses are hard to syllabify and just look ugly in poetry.
+    '@',                                                # email addresses are hard to syllabify & look ugly in poetry.
     '_',                                                # reject underlines, mostly because they are often usernames
     'http://', 'https://', 'www',                       # URLs occasionally appear, but let's reject them too.
     ''.join([chr(i) for i in [99, 117, 110, 116]]),     # the C word
@@ -518,7 +521,7 @@ def choose_texts() -> typing.List[str]:
     """
     log_it("Choosing training texts ...", 2)
     if not sc.oldmethod:
-        log_it("  ... preparing textual similarity cache ...", 1)
+        log_it("  ... unpacking textual similarity cache ...", 1)
         with sc.open_cache() as similarity_cache:
             log_it("    ... cache prepared!", 2)
             sample_texts = sc.get_source_texts(similarity_cache)
@@ -576,7 +579,7 @@ def concretize_form(form_name: str,
         return dict(ret)
 
     # OK, now work out the line-by-line plan for syllabification for the entire poem.
-    assert (ret['stanza length'] % len(ret['meter pattern']) == 0), "ERROR! length of specified meter pattern is not a factor of stanza length!"
+    assert (ret['stanza length'] % len(ret['meter pattern']) == 0), f"ERROR! length of specified meter pattern ({ret['meter pattern']}) is not a factor of stanza length ({ret['stanza length']})!"
     syllabic_pattern = [n * ret['syllables in foot'] for n in ret['meter pattern']] * (ret['stanza length'] // len(ret['meter pattern']))
     ret['poem form'] = [syllabic_pattern] * ret['num stanzas']
 
@@ -619,7 +622,7 @@ def bin_fit(options: typing.Iterable[typing.Union[int, float]],
     function is mostly (only?) called while trying to decide whether the list of the
     numbers of syllables in the cache of unused lines can be used to fill up the
     remaining syllables needed in a particular poem, and so far this list has not
-    grown large enough to make recursion in this function a problem.
+    grown large enough to make deep recursion a problem for this function.
     """
     options = list(options)
     if not options:
@@ -714,6 +717,8 @@ def syllables_in_word(word: str) -> int:
         return len([ph for ph in phoneme_dict[w] if ph.strip(string.ascii_letters)])
     except (KeyError,):
         return supplemental_syllable_count(w)
+
+    # FIXME: We need to save computed syllabic data for human verification!
 
 
 @functools.lru_cache(maxsize=1024)
@@ -978,11 +983,11 @@ def is_known_word(word: str) -> bool:
 
 
 def is_rejectable(sentence: str,
-                  genny: pg.PoemGenerator) -> bool:
-    """Checks to see if the sentence SENTENCE needs to be rejected, based on whatever
-    criteria are necessary to ensure pleasing MTW poems. Requires that GENNY, a
-    fully-trained TextGenerator, be passed in, because it uses GENNY to do word-
-    splitting.
+                  genny: typing.Type[tg.TextGenerator]) -> bool:
+    """Checks to see if SENTENCE (a sentence) needs to be rejected, based on whatever
+    criteria are necessary to ensure pleasing poems. Requires that GENNY, a
+    fully-trained TextGenerator or subclass, be passed in, because it uses GENNY to
+    do word-splitting.
     """
     tokenized = genny._tokenize_string(sentence)
 
@@ -994,14 +999,14 @@ def is_rejectable(sentence: str,
     if len([w for w in tokenized if w.isnumeric()]) > 0:
         return True
 
-    # Next, check to see if the text generator produced any words that we use as the basis on their own for rejecting sentences.
+    # Next, check to see if the text includes any words that are the basis on their own for rejecting sentences.
     sent = sentence.strip().lower()
     for w in prohibs:
         if w.lower().strip() in sent:
             return True
 
     # Have a high probability of rejecting very short sentences.
-    if len([w for w in tokenized if syllables_in_word(w)]) < 1:
+    if len([w for w in tokenized if syllables_in_word(w)]) < 1:     # FIXME: Is this even a meaningful test?
         return True
 
     if len([w for w in tokenized if syllables_in_word(w)]) == 1:
@@ -1067,8 +1072,9 @@ def write_structured(genny: typing.Type[tg.TextGenerator],
     will be used to generate the text. POSSIBLE_SYLLABLE_COUNTS is a collection of
     integers representing the syllabic counts that are legal for the desired poem.
     """
-    assert genny.is_trained()
     global unused_lines
+
+    assert genny.is_trained()
     print(f"   ... starting with {len(unused_lines)} sentences in the unused sentences list")
 
     poem = collections.deque()  # of 2-tuples: ('text of line', integral syllable count)
@@ -1107,8 +1113,7 @@ def write_structured(genny: typing.Type[tg.TextGenerator],
                             unused_lines.append(poem.popleft())
                             poem.append((new_line, new_syllables))
                     else:
-                        if (new_syllables <= max(
-                                possible_syllable_counts)):  # Don't bother saving sentences that are too long to possibly work.
+                        if (new_syllables <= max(possible_syllable_counts)):  # Don't bother saving sentences that are too long to possibly work.
                             unused_lines.append((new_line, new_syllables))
                         if random.random() >= 0.5:  # There are even odds that we not only reject the new line ...
                             if random.random() >= 0.5:  # but also remove the previous one, or the first one, if we've already generated at least one sentence.
@@ -1171,7 +1176,7 @@ def write_poem(genny: typing.Type[tg.TextGenerator],
 def structure_poem(poem_lines: typing.Iterable[typing.Tuple[str, int]],
                    form_name: str,
                    form_description: dict,
-                   genny: tg.TextGenerator) -> typing.List[str]:
+                   genny: typing.Type[tg.TextGenerator]) -> typing.List[str]:
     """Given a list of POEM_LINES, arrange them into the syllabic pattern described by
     FORM_DESCRIPTION. Currently makes no attempt to handle any formal aspects of the
     poem besides syllable count.
@@ -1201,15 +1206,17 @@ def structure_poem(poem_lines: typing.Iterable[typing.Tuple[str, int]],
         else:
             missed = True           # If we bumped into a non-integral line, we're done trying to fill in lines.
 
-    # OK, we've consumed all of the lines we can that match needed line lengths at the beginning and end of the poem.
+    # OK, we've consumed all the lines we can that match needed line lengths at the beginning and end of the poem.
     # We consume the rest of the text by breaking it into tokens and consuming as many as are necessary for each
     # remaining unwritten line, tracking how many syllables over or under we are, making sure that we keep at least one
-    # word for each remaining line.
+    # word for each remaining line that has to be filled.
     remaining_poem_lines = list(remaining_poem_lines)
     random.shuffle(remaining_poem_lines)
     remaining_tokens = genny._tokenize_string(' '.join([line[0] for line in remaining_poem_lines]))
     lines_left_to_fill = len([line for line in template if isinstance(line, int)])
-    syllable_debt = 0           # How many syllables over our target we were at the time we ended our last line. Negative numbers mean "syllables under" instead.
+
+    syllable_debt = 0           # How many syllables over our target we were at the time we ended our last line.
+    # Negative numbers mean "syllables under" instead of "over."
 
     for line_no, line_length in enumerate(template):
         if isinstance(line_length, str):       # Do nothing: line is already filled in.
@@ -1289,11 +1296,11 @@ def get_title(the_poem: str,
     assert isinstance(the_poem, str)
     log_it("INFO: getting a title for the poem", 2)
 
-    if random.random() < (1 / 15):
+    if random.random() < (1 / 30):
         title = f"Untitled Poem # {1 + count_previous_untitled_poems()}"
-    elif random.random() < (1 / 14):
+    elif random.random() < (1 / 28):
         title = f"Untitled Composition # {1 + count_previous_untitled_poems()}"
-    elif random.random() < (1 / 13):
+    elif random.random() < (1 / 26):
         title = f"Untitled # {1 + count_previous_untitled_poems()}"
     elif random.random() < (2 / 12):
         title = f"Untitled (‘{th.strip_leading_and_trailing_punctuation(the_poem.split(NEWLINE)[0]).strip()}’)"
@@ -1301,7 +1308,7 @@ def get_title(the_poem: str,
         title = th.strip_leading_and_trailing_punctuation(the_poem.strip().split('\n')[0]).strip()
     elif random.random() < (3 / 6):  # Pick one of the first three lines
         title = f"‘{th.strip_leading_and_trailing_punctuation(the_poem.split(NEWLINE)[random.randint(1, 4) - 1]).strip()}’"
-    else:  # New 'sentence' from same poem
+    else:  # New 'sentence' from same generator that generated the poem
         title = th.strip_leading_and_trailing_punctuation(genny.gen_text(sentences_desired=1).split('\n')[0].strip())
     if len(title) < 5:  # Try again, recursively.
         title = get_title(the_poem, genny)
@@ -1309,16 +1316,13 @@ def get_title(the_poem: str,
         words = title.split()
         title = ' '.join(words[:random.randint(3, min(12, len(words)))])
     title = title.strip()
-    if title.startswith('‘') and not title.endswith('’'):  # The shortening procedure above might have stripped the closing quote
+    if title.startswith('‘') and not title.endswith('’'):  # shortening procedure may have stripped the closing quote
         title = title + '’'
     if '(‘' in title and not '’)' in title:
         title = title + '’)'
     title = fix_punctuation(title)
     log_it(f"Title is: {title}")
     return title
-
-
-manually_check_capitalization=False
 
 
 def final_validation(p: typing.List[typing.Tuple[str, int]]) -> typing.Iterable[typing.Tuple[str, int]]:
@@ -1417,18 +1421,18 @@ def polish_punctuation(poem_text: str) -> str:
         else:
             pass
 
-        # If anything above set CURR_CHAR to None (or anything falsey), just move along. Otherwise, perform final processing.
+        # If anything above set CURR_CHAR to None (or anything falsey), just move along. Else perform final processing.
         if curr_char:
             ret += curr_char
             prev_char = curr_char
 
-    return poem_text  # FIXME!
+    return poem_text
 
 
 def perform_absolute_final_poem_adjustments(poem_text: str) -> str:
     """Given the entire text of the poem, make any final adjustments.
 
-    Currently, does nothing.
+    Currently, does very little, and much of that should be reconsidered.
     """
     return polish_punctuation(poem_text)
 
@@ -1488,9 +1492,10 @@ def archive_post_data() -> None:
         archive_file.write(json.dumps(post_data, indent=2, ensure_ascii=False, sort_keys=False, default=repr))
 
     # FIXME! Should we also be saving other data here, e.g. maybe capitalization data?
+    # And calculated syllabification data?
 
 
-def write_sequence(genny: pg.PoemGenerator,
+def write_sequence(genny: typing.Type[tg.TextGenerator],
                    num_poems: typing.Union[int, None] = 1) -> typing.Tuple[str, str]:
     """Write and return a sequence of NUM_POEMS poems. GENNY must be a fully-trained
     TextGenerator (or subclass) instance; it will be used to generate the text of
@@ -1557,7 +1562,7 @@ def write_sequence(genny: pg.PoemGenerator,
 def main() -> None:
     """Select source poems, train a generator on them, and generate a poem.
     """
-    global genny, post_data, unused_lines
+    global post_data, unused_lines
     post_data['script info'] = get_script_version_info()
 
     # Set up the basic parameters for the run
