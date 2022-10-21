@@ -142,6 +142,7 @@ import copy
 import datetime
 import functools
 import json
+import numbers
 
 from pathlib import Path
 
@@ -208,135 +209,7 @@ more_syllable_data['all'] = collections.ChainMap(more_syllable_data['corrected']
 unused_lines = collections.deque()
 
 
-# This next is a global dictionary holding data to be archived at the end of the run. Modified constantly.
-post_data = {'tags': ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains'],
-             'normalization_strategy': None,
-             'syllabic_normalization_strategy': None,
-             'stanza length': None,
-             }
-
-poem_defaults = {
-    'max stanzas': 20,          # FIXME: for now.
-    'min stanzas': 1,
-    'indent pattern': [0,]
-}
-
-poem_forms = {
-    'ballad':
-        [
-            {   # pick one of these numbers: how long will a stanza be, in lines?
-                'stanza length': [4, 4, 4, 4, 4, 4, 4, 4, 6, 8, 8,],
-
-                # possible numbers of syllables in a foot:
-                'syllables in foot': [2, 2, 2, 2, 2, 2, 2, 3],
-
-                # METRICAL FEET, not syllables, per line.
-                # [4, 3] means a 4-foot line is followed by a 3-foot line, & this pattern repeats through the stanza.
-                'meter pattern': [4, 3],
-
-                # Number of spaces before each line in the poem.
-                # Cycles when exhausted. Need not match up with stanza length.
-                'indent pattern': [0, 4],
-             },
-        ],
-    'sonnet':
-        [
-            {'stanza length': [14,],
-             'syllables in foot': [2, 2, 2, 2, 2, 2, 3,],               # iambic pentameter is most common form
-             'meter pattern': [4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, ],
-             'max stanzas': 1,
-             },
-        ],
-    'Meredith sonnet':
-        [
-            {'stanza length': [16,],
-             'syllables in foot': [2,],
-             'meter pattern': [5,],
-             'max stanzas': 1,
-             'indent pattern': [0, 2, 2, 0,],
-             }
-        ],
-    'limerick':
-        [
-            {'stanza length': [5,],
-             'syllables in foot': [3,],                                 # Anapestic trimeter, trimeter, dimeter, ..
-             'meter pattern': [3, 3, 2, 2, 3],                          # ...  dimeter, trimeter.
-             'max stanzas': 1,
-             'indent pattern': [0, 0, 3, 3, 0,],
-             },
-        ],
-    'cinquain':
-        [
-            {'stanza length': [5,],
-             'syllables in foot': [1,],
-             'meter pattern': [2, 4, 6, 8, 2],
-             'max stanzas': 1,
-             },
-        ],
-    'curtal sonnet':
-        [
-            {'stanza length': [11,],
-             'syllables in foot': [2,],                                 # Iambic pentameter
-             'meter pattern': [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 1],        # Last line is actually a single spondee, but we don't yet have a way to represent meter.
-             'max stanzas': 1,
-             },
-        ],
-    'kimo':
-        [
-            {'stanza length': [3,],
-             'syllables in foot': [1,],
-             'meter pattern': [10, 7, 6],
-             'max stanzas': 1,
-             }
-        ],
-    'Kelly lune':
-        [
-            {'stanza length': [3,],
-             'syllables in foot': [1,],
-             'meter pattern': [5, 3, 5],
-             'max stanzas': 1,
-             },
-        ],
-    'rispetto':
-        [
-            {'stanza length': [4,],                                     # version 1: 2 iambic tetrameter quatrains
-             'syllables in foot': [2,],
-             'meter pattern': [4,],
-             'min stanzas': 2,
-             'max stanzas': 2,
-             },
-            {'stanza length': [8,],                                     # version 2: 1 stanza, 8 hendecasyllabic lines
-             'syllables in foot': [1,],
-             'meter pattern': [11,],
-             'max stanzas': 1,
-             },
-        ],
-    'tanka':
-        [
-            {'stanza length': [5,],
-             'syllables in foot': [1,],
-             'meter pattern': [5, 7, 5, 7, 7,],
-             'max stanzas': 1,
-             },
-        ],
-    'treochair':
-        [
-            {'stanza length': [3,],
-             'syllables in foot': [1,],
-             'meter pattern': [3, 7, 7],
-             },
-        ],
-    'tricube':
-        [
-            {'stanza length': [3,],
-             'syllables in foot': [1,],
-             'meter pattern': [3,],
-             'max stanzas': 3,
-             'min stanzas': 3,
-             },
-        ],
-}
-
+# Some language-related constants.
 punct_with_no_space_before = """.?,;!:#-‐‑‒–—―%&)*+/@]^_}""".strip()
 punct_with_no_space_after = """-‐‑‒–—―&(+/<=>@[_`{~""".strip()
 
@@ -360,6 +233,166 @@ phoneme_dict = dict(cmudict.entries())
 NEWLINE = "\n"
 
 
+# This next is a global dictionary holding data to be archived at the end of the run. Modified constantly.
+post_data = {'tags': ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains'],
+             'normalization_strategy': None,
+             'syllabic_normalization_strategy': None,
+             'stanza length': None,
+             }
+
+
+# Data about poetic form
+poem_defaults = {
+    'max stanzas': 20,          # FIXME: for now.
+    'min stanzas': 1,
+    'indent pattern': [0,]
+}
+
+poem_forms = {
+    'ballad':
+        [
+            {   # pick one of these numbers: how long will a stanza be, in lines?
+                'stanza length': [4, 4, 4, 4, 4, 4, 4, 4, 6, 8, 8,],
+
+                # possible numbers of syllables in a foot:
+                'syllables in foot': [2, 2, 2, 2, 2, 2, 2, 3],
+
+                # METRICAL FEET, not syllables, per line.
+                # [4, 3] means a 4-foot line is followed by a 3-foot line, & this pattern repeats through the stanza.
+                'meter pattern': [4, 3],
+
+                # Number of spaces before each line in the poem.
+                # Cycles when exhausted. Need not match up with stanza length.
+                'indent pattern': [0, 4],
+                'form name': 'ballad',
+             },
+        ],
+    'sonnet':
+        [
+            {'stanza length': [14,],
+             'syllables in foot': [2, 2, 2, 2, 2, 2, 3,],               # iambic pentameter is most common form
+             # next: allow occasional tetrameter sonnet, tho most times the program runs "sonnet" means "pentameter".
+             'meter pattern': [ random.choice([4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, ]) ],
+             'max stanzas': 1,
+             'form name': 'sonnet',
+             },
+        ],
+    'Meredith sonnet':
+        [
+            {'stanza length': [16,],
+             'syllables in foot': [2,],
+             'meter pattern': [5,],
+             'max stanzas': 1,
+             'indent pattern': [0, 2, 2, 0,],
+             'form name': 'Meredith sonnet',
+             }
+        ],
+    'limerick':
+        [
+            {'stanza length': [5,],
+             'syllables in foot': [3,],                                 # Anapestic trimeter, trimeter, dimeter, ..
+             'meter pattern': [3, 3, 2, 2, 3],                          # ...  dimeter, trimeter.
+             'max stanzas': 1,
+             'indent pattern': [0, 0, 3, 3, 0,],
+             'form name': 'limerick',
+             },
+        ],
+    'cinquain':
+        [
+            {'stanza length': [5,],
+             'syllables in foot': [1,],
+             'meter pattern': [2, 4, 6, 8, 2],
+             'max stanzas': 1,
+             'form name': 'cinquain',
+             },
+        ],
+    'curtal sonnet':
+        [
+            {'stanza length': [11,],
+             'syllables in foot': [2,],                                 # Iambic pentameter
+             'meter pattern': [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 1],        # Last line is actually a single spondee, but we don't yet have a way to represent meter.
+             'max stanzas': 1,
+             'form name': 'curtal sonnet',
+             },
+        ],
+    'kimo':
+        [
+            {'stanza length': [3,],
+             'syllables in foot': [1,],
+             'meter pattern': [10, 7, 6],
+             'max stanzas': 1,
+             'form name': 'kimo',
+             }
+        ],
+    'Kelly lune':
+        [
+            {'stanza length': [3,],
+             'syllables in foot': [1,],
+             'meter pattern': [5, 3, 5],
+             'max stanzas': 1,
+             'form name': 'Kelly lune',
+             },
+        ],
+    'rispetto':
+        [
+            {'stanza length': [4,],                                     # version 1: 2 iambic tetrameter quatrains
+             'syllables in foot': [2,],
+             'meter pattern': [4,],
+             'min stanzas': 2,
+             'max stanzas': 2,
+             'form name': 'rispetto',
+             },
+            {'stanza length': [8,],                                     # version 2: 1 stanza, 8 hendecasyllabic lines
+             'syllables in foot': [1,],
+             'meter pattern': [11,],
+             'max stanzas': 1,
+             'form name': 'rispetto',
+             },
+        ],
+    'tanka':
+        [
+            {'stanza length': [5,],
+             'syllables in foot': [1,],
+             'meter pattern': [5, 7, 5, 7, 7,],
+             'max stanzas': 1,
+             'form name': 'tanka',
+             },
+        ],
+    'treochair':
+        [
+            {'stanza length': [3,],
+             'syllables in foot': [1,],
+             'meter pattern': [3, 7, 7],
+             'form name': 'treochair',
+             },
+        ],
+    'tricube':
+        [
+            {'stanza length': [3,],
+             'syllables in foot': [1,],
+             'meter pattern': [3,],
+             'max stanzas': 3,
+             'min stanzas': 3,
+             'form name': 'tricube',
+             },
+        ],
+}
+# Now perform a crude adjustment to the frequency with which different forms are selected for writing.
+# We do this by inflating the number of keys that lead to a particular structure record, so for instance the sonnet
+# form is referenced again via the key names sonnet1, sonnet2, ... sonnetN. This works because form is picked
+# at random from all keys
+for (form_name, multiplier) in (
+        ('ballad', 10),
+        ('sonnet', 15),
+        ('Meredith sonnet', 3),
+        ('limerick', 4),
+        ('curtal sonnet', 3),
+        ('rispetto', 2)):
+    for i in range(1, 1+multiplier):
+        poem_forms[f"{form_name}{i}"] = poem_forms[form_name]
+
+
+# Next, some general utility functions.
 def print_usage(exit_code: int = 0) -> None:
     """Print the docstring as a usage message to stdout, then quit with status code
     EXIT_CODE.
@@ -397,32 +430,7 @@ def get_script_version_info() -> typing.Dict[str, typing.Dict[str, str]]:
     }
 
 
-@functools.lru_cache(maxsize=None)
-def manually_count_syllables(word: str) -> int:
-    """Clearly not perfect, but better than nothing.
-
-    #FIXME: we should be keeping an additional list for words not in cmudict.
-
-    Based on https://datascience.stackexchange.com/a/24865.
-    """
-    count = 0
-    vowels = 'aeæiouy'
-    word = unicodedata.normalize('NFKD', word.lower()).encode('ASCII', 'ignore').decode('ASCII')    # strip diacritics
-    if len(word) == 0: return 0             # Naively assume that null words have no syllables.
-    if word[0] in vowels:
-        count +=1
-    for index in range(1, len(word)):
-        if word[index] in vowels and word[index-1] not in vowels:
-            count +=1
-    if word.endswith('e'):
-        count -= 1
-    if word.endswith('le'):
-        count += 1
-    if count == 0:
-        count += 1
-    return count
-
-
+# Some numeric utilities.
 @functools.lru_cache(maxsize=256)
 def eratosthenes_sieve(upper_limit: int = 101) -> typing.List[int]:
     """Generate a list of primes greater than zero but no larger than UPPER_LIMIT,
@@ -436,6 +444,20 @@ def eratosthenes_sieve(upper_limit: int = 101) -> typing.List[int]:
     return sorted(ret)
 
 
+@functools.lru_cache(maxsize=128)
+def might_be_an_int(what: typing.Any) -> bool:
+    """Return True if WHAT can be coerced to an integer, or False otherwise.
+
+    Returns True, not an integer.
+    """
+    try:
+        _ = int(what)
+        return True
+    except (TypeError, ValueError,):
+        return False
+
+
+# Sequence-related utilities.
 def _flatten_list(l: typing.Iterable) -> typing.Generator[object, None, None]:
     """Regardless of how deep the list L is, return a list that has the non-list atoms
     that compose the list L. If L contains any lists, the returned list will contain
@@ -463,17 +485,92 @@ def flatten_list(l: typing.Iterable) -> typing.List[object]:
     return list(_flatten_list(l))
 
 
-@functools.lru_cache(maxsize=128)
-def might_be_an_int(what: typing.Any) -> bool:
-    """Return True if WHAT can be coerced to an integer, or False otherwise.
+def alternating_sequence(min: int,
+                         max: int) -> typing.Sequence[int]:
+    """Takes the sequence of integers
+        [ MIN, MIN + 1, MIN + 2 ... MAX - 2, MAX - 1, MAX ]
 
-    Returns True, not an integer.
+    and reorders it to
+        [ MIN, MAX, MIN + 1, MAX - 1, MIN + 2, MAX - 2, ... ]
+
+    Note that MAX is the actual highest member in the range, not the integer past
+    the highest member. This is not a half-open interval.
     """
-    try:
-        _ = int(what)
-        return True
-    except (TypeError, ValueError,):
-        return False
+    working, ret, first = list(range(min, max + 1)), list(), True
+    while working:
+        ret.append(working.pop(0 if (first) else -1))
+        first = not first
+    return ret
+
+
+@functools.lru_cache(maxsize=1024)
+def bin_fit(options: typing.Iterable[typing.Union[int, float]],
+            goal: typing.Union[int, float]) -> typing.Union[typing.List[numbers.Number], None]:
+    """Given OPTIONS, a list of numeric values, tries to find a combination of values
+    that add up to GOAL. If it finds such a list, returns it. Otherwise, returns
+    None.
+
+    Returns the first solution found, which means in practice that it prefers to
+    find a list containing a few large numbers rather than many small ones. This
+    particular choice was made specifically because it's best to compose a poem from
+    fewer comparatively long sentences than to compose a poem from many very short
+    ones.
+
+    Calls itself recursively, but this is not likely to be a problem unless we start
+    dealing with much longer lists than tests have so far managed to generate. This
+    function is mostly (only?) called while trying to decide whether the list of the
+    numbers of syllables in the cache of unused lines can be used to fill up the
+    remaining syllables needed in a particular poem, and so far this list has not
+    grown large enough to make deep recursion a problem for this function.
+    """
+    options = list(options)
+    if not options:
+        if goal == 0:
+            return options
+        else:
+            return None
+
+    if sum(options) == goal:
+        return options
+
+    else:
+        current_opts = list(sorted([i for i in options if i <= goal], reverse=True))
+        for current in current_opts:
+            if current == goal:
+                return [current]
+            else:
+                next_opts = current_opts[:]
+                next_opts.remove(current)
+                smaller_bin = bin_fit(tuple(next_opts), (goal - current))
+                if smaller_bin:
+                    return [current] + smaller_bin
+
+
+# Some text-related utilities.
+@functools.lru_cache(maxsize=None)
+def manually_count_syllables(word: str) -> int:
+    """Clearly not perfect, but better than nothing.
+
+    #FIXME: we should be keeping an additional list for words not in cmudict.
+
+    Based on https://datascience.stackexchange.com/a/24865.
+    """
+    count = 0
+    vowels = 'aeæiouy'
+    word = unicodedata.normalize('NFKD', word.lower()).encode('ASCII', 'ignore').decode('ASCII')    # strip diacritics
+    if len(word) == 0: return 0             # Naively assume that null words have no syllables.
+    if word[0] in vowels:
+        count +=1
+    for index in range(1, len(word)):
+        if word[index] in vowels and word[index-1] not in vowels:
+            count +=1
+    if word.endswith('e'):
+        count -= 1
+    if word.endswith('le'):
+        count += 1
+    if count == 0:
+        count += 1
+    return count
 
 
 def int_to_roman(input: int) -> str:
@@ -516,137 +613,6 @@ def ordinal_description(number: int,
     return ret
 
 
-def choose_texts() -> typing.List[str]:
-    """Actually choose the source texts.
-    """
-    log_it("Choosing training texts ...", 2)
-    if not sc.oldmethod:
-        log_it("  ... unpacking textual similarity cache ...", 1)
-        with sc.open_cache() as similarity_cache:
-            log_it("    ... cache prepared!", 2)
-            sample_texts = sc.get_source_texts(similarity_cache)
-    else:
-        sample_texts = sc.get_source_texts(None)
-    log_it(" ... selected %d texts" % len(sample_texts), 2)
-    return sample_texts
-
-
-def get_separators(num_separators: int) -> typing.List[str]:
-    """Get a list of textual separators to be used between individual poems in a
-    sequence, such as Roman or Arabic numerals, or perhaps longer textual
-    descriptions like "stanza XII" or "section 14".
-    """
-    if num_separators == 1:
-        return list()
-
-    text_label = random.choice(['Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza',
-                                'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza',
-                                'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza',
-                                'Verse', 'Verse', 'Verse', 'Part', 'Chapter'])  # FIXME! expand choices!
-    if random.random() <= 0.15:             # Roman numerals.
-        return [f"{int_to_roman(i)}" for i in range(1, 1 + num_separators)]
-    if random.random() <= 0.05:             # Roman numerals with text labels.
-        return [f"{text_label} {int_to_roman(i)}" for i in range(1, 1 + num_separators)]
-    if random.random() <= 0.08:             # ordinal description with text label
-        return [f"{ordinal_description(i, True)} {text_label}" for i in range(1, 1 + num_separators)]
-    if random.random() <= 0.02:             # Ordinal description with text label and article.
-        return [f"{text_label} the {ordinal_description(i, True)}" for i in range(1, 1 + num_separators)]
-    if random.random() <= 0.08:             # blank: no separators
-        return ['' for _ in range(num_separators)]
-    return ['%d' % i for i in range(1, 1 + num_separators)]
-
-
-def concretize_form(form_name: str,
-                    form_desc: dict) -> dict:
-    """Given FORM_DESC, a formalized description of a poetic form called FORM_NAME,
-    make specific choices about how the form should be instantiated.
-
-    Returns a dict that includes all the information from the FORM_DESC, plus
-    additional information recording the choices that the function makes.
-    """
-    ret = dict(collections.ChainMap(form_desc, poem_defaults))
-    try:
-        ret['stanza length'] = random.choice(ret['stanza length'])
-    except (TypeError,):
-        return dict(ret)  # If we've already chosen an integer from the list, assume the form is already concretized.
-    try:
-        ret['syllables in foot'] = random.choice(ret['syllables in foot'])
-    except (TypeError,):
-        return dict(ret)
-    try:
-        ret['num stanzas'] = random.choice(range(ret['min stanzas'], 1 + ret['max stanzas']))
-    except (TypeError,):
-        return dict(ret)
-
-    # OK, now work out the line-by-line plan for syllabification for the entire poem.
-    assert (ret['stanza length'] % len(ret['meter pattern']) == 0), f"ERROR! length of specified meter pattern ({ret['meter pattern']}) is not a factor of stanza length ({ret['stanza length']})!"
-    syllabic_pattern = [n * ret['syllables in foot'] for n in ret['meter pattern']] * (ret['stanza length'] // len(ret['meter pattern']))
-    ret['poem form'] = [syllabic_pattern] * ret['num stanzas']
-
-    return ret
-
-
-def alternating_sequence(min: int,
-                         max: int) -> typing.Sequence[int]:
-    """Takes the sequence of integers
-        [ MIN, MIN + 1, MIN + 2 ... MAX - 2, MAX - 1, MAX ]
-
-    and reorders it to
-        [ MIN, MAX, MIN + 1, MAX - 1, MIN + 2, MAX - 2, ... ]
-
-    Note that MAX is the actual highest member in the range, not the integer past
-    the highest member. This is not a half-open interval.
-    """
-    working, ret, first = list(range(min, max + 1)), list(), True
-    while working:
-        ret.append(working.pop(0 if (first) else -1))
-        first = not first
-    return ret
-
-
-@functools.lru_cache(maxsize=1024)
-def bin_fit(options: typing.Iterable[typing.Union[int, float]],
-            goal: typing.Union[int, float]) -> typing.Union[typing.List[typing.Union[int, float]], None]:
-    """Given OPTIONS, a list of numeric values, tries to find a combination of values
-    that add up to GOAL. If it finds such a list, returns it. Otherwise, returns
-    None.
-
-    Returns the first solution found, which means in practice that it prefers to
-    find a list containing a few large numbers rather than many small ones. This
-    particular choice was made specifically because it's best to compose a poem from
-    fewer comparatively long sentences than to compose a poem from many very short
-    ones.
-
-    Calls itself recursively, but this is not likely to be a problem unless we start
-    dealing with much longer lists than tests have so far managed to generate. This
-    function is mostly (only?) called while trying to decide whether the list of the
-    numbers of syllables in the cache of unused lines can be used to fill up the
-    remaining syllables needed in a particular poem, and so far this list has not
-    grown large enough to make deep recursion a problem for this function.
-    """
-    options = list(options)
-    if not options:
-        if goal == 0:
-            return options
-        else:
-            return None
-
-    if sum(options) == goal:
-        return options
-
-    else:
-        current_opts = list(sorted([i for i in options if i <= goal], reverse=True))
-        for current in current_opts:
-            if current == goal:
-                return [current]
-            else:
-                next_opts = current_opts[:]
-                next_opts.remove(current)
-                smaller_bin = bin_fit(tuple(next_opts), (goal - current))
-                if smaller_bin:
-                    return [current] + smaller_bin
-
-
 def strip_invalid_chars(the_poem: str) -> str:
     """Some characters appear in the training texts but are characters that, I am
     declaring by fiat, should not make it into the final generated poems at all.
@@ -671,10 +637,10 @@ def strip_diacritics(the_input: str) -> str:
 def normalize_text(the_text: str,
                    lowercase: bool = False) -> str:
     """Get the "comparison" or "normalized" form of a piece of text. This strips off all
-    unicode accents and, if LOWERCASE is True, reduces the text to lowercase.
+    unicode accents and, if LOWERCASE is True, also casefolds the text.
     """
     if lowercase:
-        return strip_diacritics(the_text).lower()
+        return strip_diacritics(the_text).casefold()
     else:
         return strip_diacritics(the_text)
 
@@ -1005,8 +971,8 @@ def is_rejectable(sentence: str,
         if w.lower().strip() in sent:
             return True
 
-    # Have a high probability of rejecting very short sentences.
-    if len([w for w in tokenized if syllables_in_word(w)]) < 1:     # FIXME: Is this even a meaningful test?
+    # Rejecting very short sentences, e.g. those composed entirely of punctuation.
+    if len([w for w in tokenized if syllables_in_word(w)]) < 1:
         return True
 
     if len([w for w in tokenized if syllables_in_word(w)]) == 1:
@@ -1048,6 +1014,78 @@ def is_rejectable(sentence: str,
     return False
 
 
+# Some poem-structuring utilities.
+def choose_texts() -> typing.List[str]:
+    """Actually choose the source texts.
+    """
+    log_it("Choosing training texts ...", 2)
+    if not sc.oldmethod:
+        log_it("  ... unpacking textual similarity cache ...", 1)
+        with sc.open_cache() as similarity_cache:
+            log_it("    ... cache prepared!", 2)
+            sample_texts = sc.get_source_texts(similarity_cache)
+    else:
+        sample_texts = sc.get_source_texts(None)
+    log_it(" ... selected %d texts" % len(sample_texts), 2)
+    return sample_texts
+
+
+def get_separators(num_separators: int) -> typing.List[str]:
+    """Get a list of textual separators to be used between individual poems in a
+    sequence, such as Roman or Arabic numerals, or perhaps longer textual
+    descriptions like "stanza XII" or "section 14".
+    """
+    if num_separators == 1:
+        return list()
+
+    text_label = random.choice(['Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza',
+                                'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza',
+                                'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza', 'Stanza',
+                                'Verse', 'Verse', 'Verse', 'Part', 'Chapter'])  # FIXME! expand choices!
+    if random.random() <= 0.15:             # Roman numerals.
+        return [f"{int_to_roman(i)}" for i in range(1, 1 + num_separators)]
+    if random.random() <= 0.05:             # Roman numerals with text labels.
+        return [f"{text_label} {int_to_roman(i)}" for i in range(1, 1 + num_separators)]
+    if random.random() <= 0.08:             # ordinal description with text label
+        return [f"{ordinal_description(i, True)} {text_label}" for i in range(1, 1 + num_separators)]
+    if random.random() <= 0.02:             # Ordinal description with text label and article.
+        return [f"{text_label} the {ordinal_description(i, True)}" for i in range(1, 1 + num_separators)]
+    if random.random() <= 0.08:             # blank: no separators
+        return ['' for _ in range(num_separators)]
+    return ['%d' % i for i in range(1, 1 + num_separators)]
+
+
+def concretize_form(form_name: str,
+                    form_desc: dict) -> dict:
+    """Given FORM_DESC, a formalized description of a poetic form called FORM_NAME,
+    make specific choices about how the form should be instantiated.
+
+    Returns a dict that includes all the information from the FORM_DESC, plus
+    additional information recording the choices that the function makes.
+    """
+    ret = dict(collections.ChainMap(form_desc, poem_defaults))
+    try:
+        ret['stanza length'] = random.choice(ret['stanza length'])
+    except (TypeError,):
+        return dict(ret)  # If we've already chosen an integer from the list, assume the form is already concretized.
+    try:
+        ret['syllables in foot'] = random.choice(ret['syllables in foot'])
+    except (TypeError,):
+        return dict(ret)
+    try:
+        ret['num stanzas'] = random.choice(range(ret['min stanzas'], 1 + ret['max stanzas']))
+    except (TypeError,):
+        return dict(ret)
+
+    # OK, now work out the line-by-line plan for syllabification for the entire poem.
+    assert (ret['stanza length'] % len(ret['meter pattern']) == 0), f"ERROR! length of specified meter pattern ({ret['meter pattern']}) is not a factor of stanza length ({ret['stanza length']})!"
+    syllabic_pattern = [n * ret['syllables in foot'] for n in ret['meter pattern']] * (ret['stanza length'] // len(ret['meter pattern']))
+    ret['poem form'] = [syllabic_pattern] * ret['num stanzas']
+
+    return ret
+
+
+# High-level composition utilities.
 def get_poem_sentence(genny: typing.Type[tg.TextGenerator],
                       maximum_syllable_length: int) -> str:
     """Use GENNY to get a single sentence that may be integrated into the poem,
@@ -1176,7 +1214,7 @@ def write_poem(genny: typing.Type[tg.TextGenerator],
 def structure_poem(poem_lines: typing.Iterable[typing.Tuple[str, int]],
                    form_name: str,
                    form_description: dict,
-                   genny: typing.Type[tg.TextGenerator]) -> typing.List[str]:
+                   genny: typing.Type[tg.TextGenerator]) -> typing.List[typing.List[str]]:
     """Given a list of POEM_LINES, arrange them into the syllabic pattern described by
     FORM_DESCRIPTION. Currently makes no attempt to handle any formal aspects of the
     poem besides syllable count.
@@ -1307,7 +1345,9 @@ def get_title(the_poem: str,
     elif random.random() < (4 / 10):  # First line, in quotes
         title = th.strip_leading_and_trailing_punctuation(the_poem.strip().split('\n')[0]).strip()
     elif random.random() < (3 / 6):  # Pick one of the first three lines
-        title = f"‘{th.strip_leading_and_trailing_punctuation(the_poem.split(NEWLINE)[random.randint(1, 4) - 1]).strip()}’"
+        split_poem = the_poem.split(NEWLINE)
+        num_sents = len(split_poem)
+        title = f"‘{th.strip_leading_and_trailing_punctuation(split_poem[random.randint(1, min(4, num_sents))-1]).strip()}’"
     else:  # New 'sentence' from same generator that generated the poem
         title = th.strip_leading_and_trailing_punctuation(genny.gen_text(sentences_desired=1).split('\n')[0].strip())
     if len(title) < 5:  # Try again, recursively.
@@ -1365,7 +1405,7 @@ def polish_punctuation(poem_text: str) -> str:
     currently_open_brackets = list()  # A (loose) stack of length-1 strings. Most recently opened bracket is at the end.
 
     for index, curr_char in enumerate(poem_text):
-        # Walk through the poem, character by character, tracking the previious character (if there is one) and the next
+        # Walk through the poem, character by character, tracking the previous character (if there is one) and the next
         # character (if there is one). Any of the following code can change CURR_CHAR to something else (e.g. a
         # straight to a curly quote). If, at the end of the loop, CURR_CHAR is None (or anything falsey), nothing
         # further is done with that character; otherwise, CURR_CHAR is added to the poem.
@@ -1445,6 +1485,10 @@ def arrange_sequence(genny: typing.Type[tg.TextGenerator],
     a subtitle, and assemble them into the actual text of the post that will be
     shipped off to the online host. This is the beginning of the last chance to
     intervene in text production before the text is published.
+
+    Returns the HTMLified full text of the poem sequence.
+
+    #FIXME: separate out HTML markup and leave it for much later!
     """
     global post_data
 
@@ -1475,8 +1519,35 @@ def arrange_sequence(genny: typing.Type[tg.TextGenerator],
     return ret
 
 
+def save_syllabification_data() -> None:
+    """Save the computed syllabification data to its own database, which should be
+    parsed with a (to-be-written, as of 20 Oct 2022) script that asks a human to
+    validate or override its calculated values.
+    """
+    global more_syllable_data
+
+    del more_syllable_data['all']
+    success = False
+    try:
+        if syllables_cache.exists():            # Rename an existing file to have a .bak extension
+            syllables_cache.rename(syllables_cache.with_suffix('.bak'))
+        with open(syllables_cache, 'wt', encoding='utf-8') as json_file:
+            json.dump(more_syllable_data, json_file, ensure_ascii=False, indent=2, sort_keys=True)
+        success = True
+    finally:
+        if syllables_cache.with_suffix('.bak').exists():    # If a .bak file exists ...
+            if success:                                         # ... and we succeeded
+                syllables_cache.with_suffix('.bak').unlink()    # ... remove the backup file.
+            else:                                           # If we didn't succeed ...
+                syllables_cache.with_suffix('.bak').rename(syllables_cache)     # restore the backup.
+        more_syllable_data['all'] = collections.ChainMap(more_syllable_data['corrected'],
+                                                         more_syllable_data['validated'],
+                                                         more_syllable_data['computed'])
+
+
 def archive_post_data() -> None:
-    """Archive the poem and its relevant data in the archives/ folder."""
+    """Archive the poem and its relevant data in the archives/ folder.
+    """
     global post_data
 
     potential_archive_dirs = sorted(list(archive_dir.glob('*')))
@@ -1491,8 +1562,9 @@ def archive_post_data() -> None:
     with bz2.open(archive_file_path, mode='wt', encoding='utf-8') as archive_file:
         archive_file.write(json.dumps(post_data, indent=2, ensure_ascii=False, sort_keys=False, default=repr))
 
+    # Also save other data that needs to be saved.
+    save_syllabification_data()
     # FIXME! Should we also be saving other data here, e.g. maybe capitalization data?
-    # And calculated syllabification data?
 
 
 def write_sequence(genny: typing.Type[tg.TextGenerator],
@@ -1512,17 +1584,18 @@ def write_sequence(genny: typing.Type[tg.TextGenerator],
         expanded_opts = flatten_list([[j] * (len(opts) + 1 - i) for i, j in enumerate(opts)])
         num_poems = random.choice(expanded_opts)
 
-    form_name = random.choice(list(poem_forms.keys()))
-    form_description = random.choice(poem_forms[form_name])
-    post_data['form'] = {'name': form_name, 'description': copy.deepcopy(form_description)}
-    post_data['tags'].append(form_name)
-
-    separators = get_separators(num_poems)
+    separators = get_separators(num_poems)          # But no separators if just one poem ...
     if separators:
         if might_be_an_int(separators[0]):                      # If separators are just numbers, zero-pad the archival copies so they display in order when viewing JSON archives.
             archival_separator_labels = [f"{int(sep):04}" for sep in separators]
         else:
             archival_separator_labels = separators
+
+    form = random.choice(list(poem_forms.keys()))       # Pick a key from the poem_forms dictionary.
+    form_description = random.choice(poem_forms[form])  # Choose one of that key's known forms
+    form_name = form_description['form name']            # Get its own preferred display name from it.
+    post_data['form'] = {'name': form_name, 'description': copy.deepcopy(form_description)}
+    post_data['tags'].append(form_name if (num_poems == 1) else f"{form_name} sequence")
 
     all_poems = list()
     for count in range(num_poems):
@@ -1582,7 +1655,7 @@ def main() -> None:
     the_poem = genny.gen_text(sentences_desired=poem_length, paragraph_break_probability=0.2)
     """
 
-    num_poems = 1 if (random.random() > 0.02) else None
+    num_poems = 1 if (random.random() > 0.0833333) else None
     post_data['title'], the_poem = write_sequence(genny, num_poems=num_poems)
 
     log_it("poem generated; title is: %s" % post_data['title'])
@@ -1616,7 +1689,6 @@ def main() -> None:
 
     archive_post_data()
     log_it("INFO: We're done\n\n\n")
-
 
 
 if __name__ == "__main__":
