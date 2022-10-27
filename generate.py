@@ -1,5 +1,6 @@
 #!/LibidoMechanica/bin/python3
 # -*- coding: utf-8 -*-
+# cython: language_level=3
 """generate.py creates the content at LibidoMechanica.tumblr.com, which is a
 blog consisting of automatically written "love poetry" created by this script.
 This program is copyright 2017-19 by Patrick Mooney.
@@ -233,12 +234,16 @@ phoneme_dict = dict(cmudict.entries())
 NEWLINE = "\n"
 
 
-# This next is a global dictionary holding data to be archived at the end of the run. Modified constantly.
-post_data = {'tags': ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains'],
-             'normalization_strategy': None,
-             'syllabic_normalization_strategy': None,
-             'stanza length': None,
+def get_blank_post_data() -> typing.Dict:
+    return {
+        'tags': ['poetry', 'automatically generated text', 'Patrick Mooney', 'Markov chains'],
+        'normalization_strategy': None,
+        'syllabic_normalization_strategy': None,'stanza length': None,
              }
+
+
+# This next is a global dictionary holding data to be archived at the end of the run. Modified constantly.
+post_data = get_blank_post_data()
 
 
 # Data about poetic form
@@ -485,8 +490,8 @@ def flatten_list(l: typing.Iterable) -> typing.List[object]:
     return list(_flatten_list(l))
 
 
-def alternating_sequence(min: int,
-                         max: int) -> typing.Sequence[int]:
+def alternating_sequence(min_num: int,
+                         max_num: int) -> typing.Sequence[int]:
     """Takes the sequence of integers
         [ MIN, MIN + 1, MIN + 2 ... MAX - 2, MAX - 1, MAX ]
 
@@ -496,7 +501,7 @@ def alternating_sequence(min: int,
     Note that MAX is the actual highest member in the range, not the integer past
     the highest member. This is not a half-open interval.
     """
-    working, ret, first = list(range(min, max + 1)), list(), True
+    working, ret, first = list(range(min_num, max_num + 1)), list(), True
     while working:
         ret.append(working.pop(0 if (first) else -1))
         first = not first
@@ -504,7 +509,7 @@ def alternating_sequence(min: int,
 
 
 @functools.lru_cache(maxsize=1024)
-def bin_fit(options: typing.Iterable[typing.Union[int, float]],
+def bin_fit(options: typing.Iterable[numbers.Number],
             goal: typing.Union[int, float]) -> typing.Union[typing.List[numbers.Number], None]:
     """Given OPTIONS, a list of numeric values, tries to find a combination of values
     that add up to GOAL. If it finds such a list, returns it. Otherwise, returns
@@ -521,9 +526,17 @@ def bin_fit(options: typing.Iterable[typing.Union[int, float]],
     function is mostly (only?) called while trying to decide whether the list of the
     numbers of syllables in the cache of unused lines can be used to fill up the
     remaining syllables needed in a particular poem, and so far this list has not
-    grown large enough to make deep recursion a problem for this function.
+    grown large enough to produce deeper recursion in this function.
+
+    When recursing, we do so only from a loop iterating over remaining options from
+    greatest to least, and only by allowing the sub-problem to work on lists of
+    numbers smaller than or equal to the number we're currently considering. This
+    helps to keep the problem scope manageable. In any case, ordering the numbers
+    and reducing the problem this way works because sum([a, b, c]) is the same as
+    sum([c, a, b]) or other permutations, because addition is commutative. So order
+    doesn't matter, and we can pick an order that narrows the problem scope in this
+    way.
     """
-    options = list(options)
     if not options:
         if goal == 0:
             return options
@@ -534,16 +547,16 @@ def bin_fit(options: typing.Iterable[typing.Union[int, float]],
         return options
 
     else:
-        current_opts = list(sorted([i for i in options if i <= goal], reverse=True))
-        for current in current_opts:
+        current_opts = sorted([i for i in options if i <= goal], reverse=True)
+        for i, current in enumerate(current_opts):
+            if 1 + 1 == len(current_opts):      # At the end of the list? No solution here.
+                return None
             if current == goal:
                 return [current]
             else:
-                next_opts = current_opts[:]
-                next_opts.remove(current)
-                smaller_bin = bin_fit(tuple(next_opts), (goal - current))
+                smaller_bin = bin_fit(tuple(current_opts[1 + i:]), (goal - current))
                 if smaller_bin:
-                    return [current] + smaller_bin
+                    return [current] + list(smaller_bin)
 
 
 # Some text-related utilities.
@@ -611,6 +624,36 @@ def ordinal_description(number: int,
         ret = ret[0].upper() + ret[1:]
 
     return ret
+
+
+def unicode_of(what: typing.Union[str, bytes]) -> str:
+    """Just force WHAT to be a Unicode string, as much as we can possibly automate
+    that. We start by using the system default, then trying UTF-8, and then, if
+    either or both is installed, tries UnicodeDammit and chardet. If all else fails,
+    decodes to Latin-1, which should always not fail although it may munge data. If
+    even *that* doesn't work or some unknown godawful reason, the error will
+    propagate upwards.
+
+    This comes in handy when interacting with external programs, which may just barf
+    up data without caring about encoding.
+    """
+    try:
+        what = what.decode()
+    except Exception:
+        try:
+            what = what.decode('utf-8')
+        except Exception:
+            try:
+                from bs4 import UnicodeDammit  # https://www.crummy.com/software/BeautifulSoup/bs4/doc/
+                return UnicodeDammit(what).unicode_markup
+            except Exception:
+                try:
+                    import chardet
+                    char_info = chardet.detect(what)
+                    what = what.decode(char_info['encoding'])
+                except Exception:
+                    what = what.decode('latin-1')
+    return what
 
 
 def strip_invalid_chars(the_poem: str) -> str:
@@ -1125,6 +1168,7 @@ def write_structured(genny: typing.Type[tg.TextGenerator],
         bag_results = bin_fit(options=tuple([l[1] for l in list(unused_lines)]),
                               goal=(max(possible_syllable_counts) - sum([line[1] for line in poem])))
         if bag_results:  # Each of these results is a syllable count we want to find.
+            bag_results = list(bag_results)
             print(f"   ... grabbing {len(bag_results)} sentences from the unused sentences list")
             while bag_results:  # Keep going until we've found all the lines we need.
                 unused_lines.rotate()  # Rotate through the deck until we hit a syllable count we need.
@@ -1606,11 +1650,11 @@ def write_sequence(genny: typing.Type[tg.TextGenerator],
         is_new_poem = False
         while not is_new_poem:
             new_poem = write_poem(genny, form_name, form_description)
-            if new_poem not in all_poems:
+            if new_poem in all_poems:
+                print("       ... rejecting poem! It is identical to another already in the sequence.")
+            else:
                 all_poems.append(new_poem)
                 is_new_poem = True
-            else:
-                print("       ... rejecting poem! It is identical to another already in the sequence.")
 
     all_poem_text = '\n'.join([i for i in flatten_list([t[0] for t in all_poems]) if isinstance(i, str)])
     title = get_title(the_poem=all_poem_text, genny=genny)
@@ -1636,6 +1680,13 @@ def main() -> None:
     """Select source poems, train a generator on them, and generate a poem.
     """
     global post_data, unused_lines
+
+    # Reset these at the beginning. Usually, this doesn't matter, since we only run through main() once in the normal
+    # course of events. But sometimes, during testing, we run repeatedly, and we want to make sure data from a previous
+    # run doesn't contaminate the data or metadata for this run.
+    post_data = get_blank_post_data()
+    unused_lines = collections.deque()
+
     post_data['script info'] = get_script_version_info()
 
     # Set up the basic parameters for the run
@@ -1691,7 +1742,12 @@ def main() -> None:
     log_it("INFO: We're done\n\n\n")
 
 
+force_test = False
 if __name__ == "__main__":
+    if force_test:
+        for i in range(200):
+            main()
+        sys.exit(0)
     if len(sys.argv) == 2:
         if sys.argv[1] in ['--help', '-h']:
             print_usage()
