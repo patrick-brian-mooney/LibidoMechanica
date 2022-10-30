@@ -1061,14 +1061,16 @@ def is_rejectable(sentence: str,
 def choose_texts() -> typing.List[str]:
     """Actually choose the source texts.
     """
+    global post_data
+
     log_it("Choosing training texts ...", 2)
     if not sc.oldmethod:
         log_it("  ... unpacking textual similarity cache ...", 1)
         with sc.open_cache() as similarity_cache:
             log_it("    ... cache prepared!", 2)
-            sample_texts = sc.get_source_texts(similarity_cache)
+            sample_texts = sc.get_source_texts(similarity_cache, post_data)
     else:
-        sample_texts = sc.get_source_texts(None)
+        sample_texts = sc.get_source_texts(None, post_data)
     log_it(" ... selected %d texts" % len(sample_texts), 2)
     return sample_texts
 
@@ -1365,7 +1367,7 @@ def structure_poem(poem_lines: typing.Iterable[typing.Tuple[str, int]],
 def count_previous_untitled_poems() -> int:
     """Get a count of the number of previous poems that have been untitled.
     """
-    ret = len([x for x in fu.get_files_list(post_archives, None) if 'untitled' in x.lower()])
+    ret = len(set([x for x in fu.get_files_list(post_archives, None) if 'untitled' in x.lower()]))
     log_it("Counted previous untitled poems: %d" % ret, 4)
     return ret
 
@@ -1742,12 +1744,13 @@ def main() -> None:
     log_it("INFO: We're done\n\n\n")
 
 
-force_test = False
+force_test = True
 if __name__ == "__main__":
     if force_test:
         for i in range(200):
             main()
         sys.exit(0)
+
     if len(sys.argv) == 2:
         if sys.argv[1] in ['--help', '-h']:
             print_usage()
@@ -1766,4 +1769,3 @@ if __name__ == "__main__":
             main()
     except pid.PidFileError:
         log_it("Already running! Quitting ...", 0)
-
