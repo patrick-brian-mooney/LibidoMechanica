@@ -382,7 +382,10 @@ if force_cache_update:
 
 oldmethod = False                # Set to True when debugging to use the (much faster) old method as a fallback.
 
-def old_selection_method(available):
+
+def old_selection_method(available: typing.Iterable,
+                         post_data: dict
+                         ) -> typing.Iterable:       # FIXME: iterable of what?
     """This is the original selection method, which merely picks a set of texts at
     random from the corpus. It is fast, but makes no attempt to select texts that
     are similar to each other. This method of picking training texts often produces
@@ -391,18 +394,22 @@ def old_selection_method(available):
 
     AVAILABLE is the complete list of available texts.
     """
-    from generate import post_data  # This is an ugly hack, importing from a module that imports us
     log_it(" ... according to the old (pure random choice) method")
     post_data['tags'] += ['old textual selection method']
     return random.sample(available, random.randint(75, 150))
 
 
-def new_selection_method(available, similarity_cache):
+def new_selection_method(available: typing.List,
+                         similarity_cache: typing.Type[BasicSimilarityCache],
+                         post_data: dict,
+                         seed_texts: typing.Optional[typing.Iterable] = None        # FIXME: iterable of what?
+                         ) -> typing.Iterable:                                      # FIXME: iterable of what?
     """The "new method" for choosing source texts involves picking a small number of
-    seed texts completely at random, then going through and adding to this small
-    corpus by looking for "sufficiently similar" texts to texts already in the
-    corpus. "Similarity" is here defined as "having a comparatively high number
-    of overlapping chains" as the text it's being compared to. A text has similarity
+    seed texts, either specified as SEED_TEXTS, or, if that parameter is not filled,
+    completely at random, then going through and adding to this small corpus by
+    looking for "sufficiently similar" texts to texts already in the corpus.
+    "Similarity" is here defined as "having a comparatively high number of
+    overlapping chains" as the text it's being compared to. A text has similarity
     1.0 when compared to itself, and similarity 0.0 when it is compared to a text
     that generates no chains in common with it (something in a different script,
     say). Typically, two poems in English chosen more or less at random will have a
@@ -424,11 +431,20 @@ def new_selection_method(available, similarity_cache):
     AVAILABLE is the complete list of poems in the corpus.
     SIMILARITY_CACHE is the already-loaded BasicSimilarityCache object.
     """
-    from generate import post_data  # This is an ugly hack, importing from a module that imports us
+    assert isinstance(available, list), f"ERROR! the AVAILABLE parameter to new_selection_method() should a list, but is instead a {type(available).__name__} !!!"
 
-    ret = random.sample(available, random.randint(3, 7))  # Seed the pot with several random source texts.
-    post_data['seed poems'] = [os.path.basename(i) for i in ret]
-    for i in ret: available.remove(i)  # Make sure already-chosen texts are not chosen again.
+    if not seed_texts:
+        ret = random.sample(available, random.randint(3, 7))  # Seed the pot with several random source texts.
+        seed_texts = [os.path.basename(i) for i in ret]
+    else:
+        ret = seed_texts
+    post_data['seed poems'] = seed_texts
+
+    available = set(available)
+    for i in ret:
+        available.discard(i)  # Make sure already-chosen texts are not chosen again.
+    available = list(available)
+
     done, candidates = False, 0
     announced, last_count = set(), 0
     while not done:
@@ -463,7 +479,8 @@ def new_selection_method(available, similarity_cache):
     return ret
 
 
-def get_source_texts(similarity_cache):
+def get_source_texts(similarity_cache: typing.Union[typing.Type[BasicSimilarityCache], None],
+                     post_data: dict):
     """Return a list of partially randomly selected texts to serve as the source texts
     for the poem we're writing. There are currently two textual selection methods,
     called "the old method" and "the new method." Each is documented in its own
@@ -471,10 +488,10 @@ def get_source_texts(similarity_cache):
     """
     log_it("Choosing source texts")
     available = [f for f in glob.glob(os.path.join(poetry_corpus, '*')) if not os.path.isdir(f)]
-    if oldmethod:
-        return old_selection_method(available)
+    if not similarity_cache:
+        return old_selection_method(available, post_data)
     else:
-        return new_selection_method(available, similarity_cache)
+        return new_selection_method(available, similarity_cache, post_data)
 
 
 
