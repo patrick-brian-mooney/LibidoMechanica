@@ -11,6 +11,7 @@ LICENSE.md for details.
 
 import array
 import bz2
+import collections
 import glob
 from pathlib import Path
 import pickle
@@ -20,14 +21,13 @@ import typing
 
 from globs import *
 from globs import similarity_cache_location, poetry_corpus
-from cython_experiments.similarity_cache import similarity_cache as sc
-
+import similarity_cache as sc
 
 import pandas as pd                                     # https://pandas.pydata.org/
 import numpy as np                                      # http://www.numpy.org/
 
 
-class MemoryHogSimilarityCache(sc.BasicSimilarityCache):
+class MemoryHogSimilarityCache(sc.AbstractSimilarityCache):
     """This BasicSimilarityCache subclass uses a pair of pandas Series to store the
     relevant data. Turns out that pandas dataframes are slow to resize, and multiple
     insertions and data accesses are slow, too, largely (I suspect) because the data
@@ -40,7 +40,7 @@ class MemoryHogSimilarityCache(sc.BasicSimilarityCache):
     def __new__(cls, *pargs, **kwargs):
         """Enforce the requirement that this be a singleton class"""
         if not cls._instance:
-            cls._instance = sc.BasicSimilarityCache.__new__(cls)
+            cls._instance = sc.AbstractSimilarityCache.__new__(cls)
         return cls._instance
 
     def __init__(self, cache_file: typing.Union[str, Path]=similarity_cache_location):
@@ -58,14 +58,6 @@ class MemoryHogSimilarityCache(sc.BasicSimilarityCache):
             print("WARNING! Unable to decode similarity cache because %s. Creating new from scratch ..." % err)
             self._similarity_data = pd.Series(dict(), dtype="float16")
             self._calculation_times = pd.Series(dict(), dtype="float64")
-
-    def __repr__(self) -> str:
-        try:
-            return "< (MemoryHog) Textual Similarity Cache, with %d results cached >" % self._similarity_data.size
-        except AttributeError:
-            return "< (MemoryHog) Textual Similarity Cache (not fully initialized: no data attached) >"
-        except BaseException as err:
-            return "< (MemoryHog) Textual Similarity Cache (unknown state because [ %s ]) >" % err
 
     def clean_cache(self):
         raise NotImplementedError("#FIXME: cleaning the cache is not yet implemented for the memory-hog-style similarity cache!")
@@ -94,7 +86,7 @@ class MemoryHogSimilarityCache(sc.BasicSimilarityCache):
 
     @staticmethod
     def _key_name_from_text_names(one: str, two: str) -> str:
-        """Takes ONE and TWo (filenames of source texts) and produces a normalized key
+        """Takes ONE and TWO (filenames of source texts) and produces a normalized key
         used to index the similarity cache to find or store the similarity between those
         two texts. Returns a string, which is that key.
 
@@ -199,7 +191,7 @@ class ShardedChainMap(collections.ChainMap):
         raise KeyError(key)
 
 
-cdef class ChainMapSimilarityCache(sc.BasicSimilarityCache):
+cdef class ChainMapSimilarityCache(sc.AbstractSimilarityCache):
     """A similarity cache that keeps its data in multiple shards, in order to limit
     both the file size of individual files and the amount of memory required when
     decompressing.
@@ -221,11 +213,11 @@ cdef class ChainMapSimilarityCache(sc.BasicSimilarityCache):
 
     def __repr__(self) -> str:
         try:
-            return "< Fragmented Textual Similarity Cache, in %d shards, with %d results cached >" % (len(self._data.maps), len(self._data))
+            return f"< Fragmented Textual Similarity Cache, in {len(self._data.maps)} shards, with {len(self._data)} results cached >"
         except AttributeError:
             return "< Fragmented Textual Similarity Cache (not fully initialized: no data attached) >"
         except BaseException as err:
-            return "< Fragmented Textual Similarity Cache (unknown state because %s) >" % err
+            return f"< Fragmented Textual Similarity Cache (unknown state because {err}) >"
 
     cpdef flush_cache(self):
         """Flush the fragmented similarity cache to disk, each shard in a separate
@@ -287,9 +279,9 @@ cdef class ChainMapSimilarityCache(sc.BasicSimilarityCache):
         entries_cleaned = len(self._data) - len(pruned)
         print("DONE! Eliminated %d stale entries (that's %.04f%%)." % (entries_cleaned, 100 * (entries_cleaned/len(self._data))))
         self._data = pruned
-        self.flush_cache()
+self.flush_cache()
 
-class VerySlowSimilarityCache(sc.BasicSimilarityCache):
+class VerySlowSimilarityCache(sc.AbstractSimilarityCache):
     """This BasicSimilarityCache is a singleton object that manages the global cache of the
     results of similarity calculations. Calculating the similarity between two texts
     is a comparatively time- and memory-intensive operation, so we cache the results
@@ -321,7 +313,7 @@ class VerySlowSimilarityCache(sc.BasicSimilarityCache):
     def __new__(cls, *args, **kwargs):
         """Enforce the requirement that this be a singleton class"""
         if not cls._instance:
-            cls._instance = sc.BasicSimilarityCache.__new__(cls, *args, **kwargs)
+            cls._instance = sc.AbstractSimilarityCache.__new__(cls, *args, **kwargs)
         return cls._instance
 
     def __init__(self, cache_file: typing.Union[str, Path]=similarity_cache_location):
@@ -344,14 +336,6 @@ class VerySlowSimilarityCache(sc.BasicSimilarityCache):
             poem_files = sorted([os.path.basename(f) for f in glob.glob(os.path.join(poetry_corpus, '*'))])
             self._similarity_data = pd.DataFrame(np.full((len(poem_files), len(poem_files)), np.nan, dtype="float16"), index=poem_files, columns=poem_files)
             self._calculation_times = pd.DataFrame(np.full((len(poem_files), len(poem_files)), np.nan, dtype="float64"), index=poem_files, columns=poem_files)
-
-    def __repr__(self) -> str:
-        try:
-            return "< (BAD-style) Textual Similarity Cache, with %d results cached >" % sum(self._similarity_data.count())
-        except AttributeError:
-            return "< (BAD-style) Textual Similarity Cache (not fully initialized: no data attached) >"
-        except BaseException as err:
-            return "< (BAD-style) Textual Similarity Cache (unknown state because %s) >" % err
 
     def clean_cache(self):
         raise NotImplementedError("#FIXME: cleaning the cache is not yet implemented for the slow-ass similarity cache!")
@@ -439,7 +423,7 @@ class VerySlowSimilarityCache(sc.BasicSimilarityCache):
         return self._similarity_data[os.path.basename(one)][os.path.basename(two)]
 
 
-class IndexedArraySimilarityCache(sc.BasicSimilarityCache):
+class IndexedArraySimilarityCache(sc.AbstractSimilarityCache):
     """Uses Python's array module to store the cached data. There are two arrays:
     one (called _similarity_data) stores similarity scores between texts, and one
     (called _calculation_times) stores the Unix timestamps when the similarity was
@@ -453,7 +437,7 @@ class IndexedArraySimilarityCache(sc.BasicSimilarityCache):
     def __new__(cls, *pargs, **kwargs):
         """Provide basic enforcement of the requirement that this be a singleton class."""
         if not cls._instance:
-            cls._instance = sc.BasicSimilarityCache.__new__(cls)
+            cls._instance = sc.AbstractSimilarityCache.__new__(cls)
         return cls._instance
 
     @staticmethod
@@ -481,14 +465,6 @@ class IndexedArraySimilarityCache(sc.BasicSimilarityCache):
             self._similarity_data.extend(self._yielder(-1, ((num_poems ** 2) // 2) - len(self._similarity_data)))
         if len(self._calculation_times) < (num_poems ** 2) / 2:
             self._calculation_times.extend(self._yielder(-1, ((num_poems ** 2) // 2) - len(self._calculation_times)))
-
-    def __repr__(self) -> None:
-        try:
-            return "< IndexedArray Textual Similarity Cache, with %d results cached >" % len(self._index)
-        except AttributeError:
-            return "< IndexedArray Textual Similarity Cache (not fully initialized: no index!) >"
-        except BaseException as err:
-            return "< IndexedArray Textual Similarity Cache (unknown state because [ %s ]) >" % err
 
     @staticmethod
     def _key_name_from_text_names(one: str, two: str) -> str:
@@ -611,14 +587,6 @@ class DictIndexedArraySimilarityCache(IndexedArraySimilarityCache):
             self._similarity_data.extend(self._yielder(-1, ((num_poems ** 2) // 2) - len(self._similarity_data)))
         if len(self._calculation_times) < (num_poems ** 2) / 2:
             self._calculation_times.extend(self._yielder(0, ((num_poems ** 2) // 2) - len(self._calculation_times)))
-
-    def __repr__(self) -> str:
-        try:
-            return "< DictIndexedArray Textual Similarity Cache, with %d results cached >" % len(self._index)
-        except AttributeError:
-            return "< DictIndexedArray Textual Similarity Cache (not fully initialized: no index!) >"
-        except BaseException as err:
-            return "< DictIndexedArray Textual Similarity Cache (unknown state because [ %s ]) >" % err
 
     @staticmethod
     def _key_from_text_names(one: str, two: str) -> typing.Tuple[str, str]:

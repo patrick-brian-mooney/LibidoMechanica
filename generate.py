@@ -178,7 +178,7 @@ import text_handling as th                              # https://github.com/pat
 import check_capitalization as cc                       # https://github.com/patrick-brian-mooney/python-personal-library
 
 from globs import *                                     # Filesystem structure, etc.
-import cython_experiments.similarity_cache.similarity_cache as sc      # Cache of calculated textual similarities.
+import similarity_cache as sc      # Cache of calculated textual similarities.
 
 
 patrick_logger.verbosity_level = 3
@@ -1069,6 +1069,7 @@ def choose_texts() -> typing.List[str]:
         with sc.open_cache() as similarity_cache:
             log_it("    ... cache prepared!", 2)
             sample_texts = sc.get_source_texts(similarity_cache, post_data)
+            similarity_cache.close_cache()
     else:
         sample_texts = sc.get_source_texts(None, post_data)
     log_it(" ... selected %d texts" % len(sample_texts), 2)
@@ -1744,7 +1745,7 @@ def main() -> None:
     log_it("INFO: We're done\n\n\n")
 
 
-force_test = True
+force_test = False
 if __name__ == "__main__":
     if force_test:
         for i in range(200):

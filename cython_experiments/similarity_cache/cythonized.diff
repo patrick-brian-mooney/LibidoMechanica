@@ -1,0 +1,108 @@
+--- similarity_cache.pyx	2022-10-28 15:05:36.817766285 -0500
++++ similarity_cache.py	2023-03-08 00:07:24.603701819 -0600
+@@ -13,11 +13,11 @@
+ project. It provides a class that tracks calculated "similarity" between texts
+ in the poetry corpus. This is an expensive calculation whose value needs to be
+ known repeatedly over multiple runs of the script, so it's saved once made.
+ 
+ This file is part of the LibidoMechanica scripts, a project that is copyright
+-2016-20 by Patrick Mooney. It is alpha software and the author releases it
++2016-23 by Patrick Mooney. It is alpha software and the author releases it
+ ABSOLUTELY WITHOUT WARRANTY OF ANY KIND. You are welcome to use it under the
+ terms of the GNU General Public License, either version 3 or (at your option)
+ any later version. See the file LICENSE.md for details.
+ 
+ A short log of optimization attempts
+@@ -110,16 +110,16 @@
+         if one > two:
+             one, two = two, one
+         return (one, two)
+ 
+ 
+-cdef struct SimilarityEntry:
+-    float when
+-    float similarity
++class SimilarityEntry:
++    when = 0.0
++    similarity = 0.9
+ 
+ 
+-cdef class BasicSimilarityCache(object):
++class BasicSimilarityCache(object):
+     """This class is the object that manages the global cache of text similarities.
+     Most subclasses of this class have not managed to improve on its performance,
+     nor on requirements while maintaining decent performance (though see
+     ChainMapSimilarityCache for a good alternative implementation).
+ 
+@@ -147,11 +147,11 @@
+         except AttributeError:
+             return "< Basic Textual Similarity Cache (not fully initialized: no data attached) >"
+         except BaseException as err:
+             return "< Basic Textual Similarity Cache (unknown state because %s) >" % err
+ 
+-    cpdef flush_cache(self):
++    def flush_cache(self):
+         """Writes the textual similarity cache to disk, if self._dirty is True. If
+         self._dirty is False, it silently returns without doing anything.
+ 
+         Or, rather, that's the basic idea. In fact, what it does is reload the version
+         of the cache that's currently on disk and updates it with new info instead of
+@@ -188,25 +188,25 @@
+         with bz2.open(self._cache_file, 'wb') as pickled_file:
+             pickle.dump(self._data, pickled_file, protocol=1)
+         log_it(" ... updated!", 3)
+         self._dirty = False
+ 
+-    cdef _store_data(self, one: typing.Union[str, Path],
++    def _store_data(self, one: typing.Union[str, Path],
+                      two: typing.Union[str, Path],
+                      similarity: float):
+         """Store the SIMILARITY (a float between 0 and 1, weighted toward zero)
+         between texts ONE and TWO in the cache.
+         """
+-        cdef SimilarityEntry entry
++        entry = SimilarityEntry()
+         entry.when = time.time()
+         entry.similarity = similarity
+         key = _key_from_texts(one, two)
+         self._data[key] = entry
+ 
+-    cdef float calculate_similarity(self, one: typing.Union[str, Path],
+-                                    two: typing.Union[str, Path],
+-                                    markov_length: int=5):
++    def calculate_similarity(self, one: typing.Union[str, Path],
++                             two: typing.Union[str, Path],
++                             markov_length: int=5):
+         """Come up with a score evaluating how similar the two texts are to each other.
+         This actually means, more specifically, "the product of (a) the percentage of
+         chains in the set of chains of length MARKOV_LENGTH constructed from text ONE
+         that are also in text TWO; multiplied by (b) the percentage of chains of
+         length MARKOV_LENGTH constructed from text TWO that are also in chains
+@@ -224,12 +224,12 @@
+         ret = calculate_overlap(chains_one, chains_two) * calculate_overlap(chains_two, chains_one)
+         self._store_data(one, two, ret)
+         self._dirty = True
+         return ret
+ 
+-    cpdef float get_similarity(self, one: typing.Union[str, Path],
+-                               two: typing.Union[str, Path]):
++    def get_similarity(self, one: typing.Union[str, Path],
++                       two: typing.Union[str, Path]):
+         """Checks to see if the similarity between ONE and TWO is already known. If it is,
+         returns that similarity. Otherwise, calculates the similarity and stores it in
+         the global similarity cache, which is written at the end of the script's run.
+ 
+         In short, this function takes advantage of the memoization of
+@@ -258,11 +258,11 @@
+             return entry['similarity']
+ 
+         log_it(" ... not found in cache! Calculating and cacheing ...", 6)
+         return self.calculate_similarity(one, two)
+ 
+-    cpdef build_cache(self):
++    def build_cache(self):
+         """Sequentially go through the corpus, text by text, forcing comparisons to all
+         other texts and cacheing the results, to make sure the cache is fully
+         populated. Periodically, it dumps the results to disk by updating the on-disk
+         cache, so that not all of the calculation results are lost if the run is
+         interrupted.
