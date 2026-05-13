@@ -1,5 +1,5 @@
 beautifulsoup4==4.12.2
-certifi==2023.11.17
+certifi==2024.7.4
 charset-normalizer==2.0.12
 click==8.0.4
 Cython==0.29.32
